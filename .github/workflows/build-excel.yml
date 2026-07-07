@@ -3,9 +3,24 @@ name: 📊 Build Excel File
 on:
   workflow_dispatch:
     inputs:
-      description:
-        description: "Describe the spreadsheet you need in plain English"
+      title:
+        description: "Sheet title (e.g. Employee Attendance Tracker)"
         required: true
+        type: string
+      columns:
+        description: |
+          Columns — format: Name, Date (date), Amount (currency), Status (dropdown: Pending|Fixed|Done), Notes (long)
+          Types: text, date, number, currency, long, dropdown
+        required: true
+        type: string
+      rows:
+        description: "Number of pre-formatted rows"
+        required: false
+        default: "200"
+        type: string
+      sample_data:
+        description: "Optional sample row(s) — separate columns with | and rows with newlines"
+        required: false
         type: string
       filename:
         description: "File name (without .xlsx)"
@@ -24,13 +39,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install openpyxl anthropic
+      - name: Install openpyxl
+        run: pip install openpyxl
 
       - name: Generate spreadsheet
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DESCRIPTION: ${{ inputs.description }}
+          TITLE: ${{ inputs.title }}
+          COLUMNS: ${{ inputs.columns }}
+          NUM_ROWS: ${{ inputs.rows }}
+          SAMPLE_DATA: ${{ inputs.sample_data }}
           FILE_NAME: ${{ inputs.filename }}
         run: python generate_ci.py
 
@@ -39,4 +56,4 @@ jobs:
         with:
           name: ${{ inputs.filename || 'My_Spreadsheet' }}
           path: "*.xlsx"
-          retention-days: 30
+          retention-days: 90

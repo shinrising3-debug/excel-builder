@@ -10,21 +10,67 @@ No install needed. Run it directly from GitHub, or download and run locally.
 
 ---
 
-## ☁️ Use It From GitHub (No Install)
+## ☁️ Use It From GitHub (No Install, No API Key, Free)
 
 **Anyone with access to this repo can generate Excel files directly from the browser:**
 
 1. Go to the **[Actions](../../actions)** tab
 2. Click **"📊 Build Excel File"** on the left
 3. Click **"Run workflow"**
-4. Type what spreadsheet you need in plain English
-5. Give it a file name
-6. Click the green **"Run workflow"** button
-7. Wait ~30 seconds → click the completed run → download your `.xlsx` from **Artifacts**
+4. Fill in the form:
+   - **Title** — what your spreadsheet is called
+   - **Columns** — your columns with types (see syntax below)
+   - **Rows** — how many blank rows to pre-format
+   - **Sample data** — optional first row(s) of data
+   - **File name** — what to name the file
+5. Click the green **"Run workflow"** button
+6. Wait ~20 seconds → click the completed run → download your `.xlsx` from **Artifacts**
 
-That's it. No Python, no install, no API key on your end.
+No Python, no API key, no cost. Pure Python builds it.
 
-> **Repo owner setup (one time):** Go to repo **Settings → Secrets and variables → Actions → New repository secret** → Name: `ANTHROPIC_API_KEY` → paste your key from [console.anthropic.com](https://console.anthropic.com)
+### Column Syntax
+
+```
+Name, Date (date), Amount (currency), Status (dropdown: Pending|Fixed|Escalated), Notes (long)
+```
+
+| Type | What it does | Example |
+|---|---|---|
+| *(none)* | Plain text, 22-width | `Employee Name` |
+| `(text)` | Same as above | `Department (text)` |
+| `(date)` | Formatted `mm/dd/yyyy` | `Hire Date (date)` |
+| `(number)` | Center-aligned number | `Quantity (number)` |
+| `(currency)` | Formatted `$#,##0.00` | `Total Cost (currency)` |
+| `(dropdown: A\|B\|C)` | Dropdown with options | `Status (dropdown: Open\|Closed\|Pending)` |
+| `(long)` | Wide column, left-aligned | `Notes (long)` |
+
+### Sample Data Format
+
+Separate columns with `|`, rows with newlines:
+```
+John Smith | 2026-07-07 | 1500.00 | Pending | First entry
+Jane Doe | 2026-07-06 | 2300.00 | Fixed | Second entry
+```
+
+### Real Examples
+
+**Barrier outage tracker:**
+```
+Title: Gate / Barrier Outage Tracker
+Columns: Door / Barrier, Time Occurred, Identified By, STM / AO Informed, Responder Dispatched, Vehicle Used (dropdown: Yes — Security Vehicle|Yes — Personal Vehicle|No|N/A), CBRE Notified, Status (dropdown: Pending|Escalated|Fixed|Manual In/Out), Time Fixed, Notes (long)
+```
+
+**Employee attendance:**
+```
+Title: Employee Attendance
+Columns: Employee Name, Date (date), Clock In, Clock Out, Total Hours (number), Overtime (number), Status (dropdown: Present|Absent|Late|Half Day)
+```
+
+**Inventory tracker:**
+```
+Title: Warehouse Inventory
+Columns: SKU, Item Name, Category (dropdown: Electronics|Furniture|Supplies|Other), Qty On Hand (number), Reorder Point (number), Unit Cost (currency), Supplier, Status (dropdown: In Stock|Low Stock|Out of Stock|On Order)
+```
 
 ---
 
