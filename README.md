@@ -43,7 +43,7 @@ A step-by-step form that asks you exactly what you need:
 
 ---
 
-## 🤖 Option 2: AI Mode (Free — Gemini)
+## 🤖 Option 2: AI Mode (Free — Groq)
 
 Just describe what you want in plain English:
 
@@ -55,7 +55,7 @@ Just describe what you want in plain English:
 
 4. Click **Run workflow** → wait 30 sec → download from **Artifacts**
 
-Powered by Google Gemini 2.0 Flash (free tier — no cost, no limits for normal use).
+Powered by Google Groq — Llama 3.3 70B (free, no credit card, fastest inference available).
 
 ---
 
@@ -90,7 +90,7 @@ Download `excel_builder.py` + `Excel_Builder.bat` → double-click the `.bat`:
 | File | Purpose |
 |---|---|
 | `build_simple.py` | Simple form builder (GitHub Actions) |
-| `build_ai.py` | Gemini AI builder (GitHub Actions) |
+| `build_ai.py` | Groq AI builder (GitHub Actions) |
 | `generate_ci.py` | Advanced column-syntax builder |
 | `excel_builder.py` | Local CLI tool (both modes) |
 | `Excel_Builder.bat` | Windows launcher for local tool |
@@ -101,10 +101,10 @@ Download `excel_builder.py` + `Excel_Builder.bat` → double-click the `.bat`:
 
 The **Simple Form** workflow needs zero secrets — it's pure Python.
 
-The **AI workflow** needs a free Gemini key:
-1. Get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+The **AI workflow** needs a free Groq key:
+1. Get a key at [console.groq.com](https://console.groq.com)
 2. Go to repo **Settings → Secrets → Actions → New secret**
-3. Name: `GEMINI_API_KEY` — paste your key
+3. Name: `GROQ_API_KEY` — paste your key
 
 ---
 
