@@ -1,42 +1,38 @@
 """
-AI Excel Builder — powered by Groq (free, fast, no credit card).
-Uses Llama 3.3 70B via Groq's OpenAI-compatible API.
+AI Excel Builder — Groq generates a JSON spec, our proven builder creates the file.
+No code execution of AI output. Much more reliable.
 """
 
-import os, sys, re, traceback
+import os, sys, re, json, traceback
 from openai import OpenAI
+from generate_ci import build_excel, parse_columns
 
-SYSTEM_PROMPT = """You are an Excel spreadsheet generator. The user will describe a spreadsheet.
+SYSTEM_PROMPT = """You convert spreadsheet descriptions into a JSON specification.
 
-Respond with ONLY valid Python code using openpyxl. No explanation, no markdown fences, no backticks. JUST raw Python.
+RESPOND WITH ONLY A JSON OBJECT. No markdown, no backticks, no explanation.
 
-RULES:
-1. Save to the path in variable OUTPUT_PATH (pre-defined, do not redefine it)
-2. Import everything you need at the top
-3. Professional formatting:
-   - ws.sheet_view.showGridLines = False
-   - Font: Aptos throughout, body text color 212529 (black)
-   - Header row: background 1B2A4A, white bold text, gold bottom border D4AF37 medium
-   - Cell borders: thin, color CED4DA on ALL data cells
-   - Alternating rows: white FFFFFF / off-white F8F9FA
-   - Row 1: 4px gold accent bar (fill entire row with D4AF37)
-   - Row 2: merged title, font size 16, bold, color 1B2A4A
-   - Row 3: merged subtitle, font size 10, color 6C757D
-   - Freeze the header row
-   - Set proper column widths
-4. Add data validation dropdowns (showDropDown=False to show arrow)
-5. Conditional formatting: BACKGROUND only, no font color change, entire ROW
-   - PatternFill(start_color="FF...", end_color="FF...", fill_type="solid")
-   - FormulaRule with stopIfTrue=True
-6. Pre-format 200 empty rows with borders, fonts, alignment, alternating fill
-7. Add a # column as column A
-8. Date columns: number_format = "mm/dd/yyyy"
-9. Currency columns: number_format = '$#,##0.00'
-10. NEVER use ws.add_table()
-11. Sanitize sheet title: remove characters / \\ : ? * [ ]
-12. Landscape orientation, fit to page width
+JSON format:
+{
+  "title": "Sheet Title Here",
+  "columns": "Name, Date (date), Amount (currency), Status (dropdown: Option1|Option2|Option3), Notes (long)",
+  "sample_data": "John Smith|2024-01-15|1500.00|Option1|First entry\\nJane Doe|2024-01-16|2300.00|Option2|Second entry"
+}
 
-OUTPUT_PATH is pre-defined before your code runs. Do not redefine it."""
+Column type syntax in the "columns" string:
+- Plain text (default): just the name, e.g. "Employee Name"
+- Date formatted: add (date), e.g. "Hire Date (date)"
+- Number: add (number), e.g. "Quantity (number)"
+- Currency: add (currency), e.g. "Total Cost (currency)"
+- Dropdown: add (dropdown: Opt1|Opt2|Opt3), e.g. "Status (dropdown: Pending|Fixed|Escalated)"
+- Wide text column: add (long), e.g. "Notes (long)"
+
+Sample data rules:
+- Columns separated by |
+- Rows separated by \\n (newline)
+- Match the column order (excluding the # column which is auto-added)
+- If the user didn't mention sample data, include 2-3 realistic example rows anyway
+
+RESPOND WITH ONLY THE JSON OBJECT. Nothing else."""
 
 
 def main():
@@ -75,39 +71,56 @@ def main():
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": description}
             ],
-            temperature=0.2,
-            max_tokens=8000,
+            temperature=0.1,
+            max_tokens=4000,
         )
 
-        code = response.choices[0].message.content
+        raw = response.choices[0].message.content.strip()
 
-        # Strip markdown fences
-        code = re.sub(r'^```python\s*\n?', '', code, flags=re.MULTILINE)
-        code = re.sub(r'^```\s*$', '', code, flags=re.MULTILINE)
-        code = code.strip()
+        # Strip markdown fences if present
+        raw = re.sub(r'^```(?:json)?\s*\n?', '', raw, flags=re.MULTILINE)
+        raw = re.sub(r'^```\s*$', '', raw, flags=re.MULTILINE)
+        raw = raw.strip()
 
-        # Save for debugging
-        with open("_generated_code.py", "w", encoding="utf-8") as f:
-            f.write(code)
-        print("💾 Generated code saved to _generated_code.py\n")
+        print(f"📄 AI response:\n{raw[:500]}\n")
 
-        # Execute
-        exec(code, {"OUTPUT_PATH": output_path, "__builtins__": __builtins__})
+        spec = json.loads(raw)
+        title = spec.get("title", "My Spreadsheet")
+        columns_raw = spec.get("columns", "")
+        sample_data = spec.get("sample_data", "")
+
+        if not columns_raw:
+            print("❌ AI returned no columns.")
+            sys.exit(1)
+
+        columns = parse_columns(columns_raw)
+        if not columns:
+            print("❌ Could not parse columns from AI response.")
+            sys.exit(1)
+
+        print(f"📋 Title: {title}")
+        print(f"📐 Columns ({len(columns)}):")
+        for col in columns:
+            opts = f" → {', '.join(col['options'])}" if col.get('options') else ""
+            print(f"   • {col['name']} ({col['type']}){opts}")
+        print()
+
+        build_excel(title, columns, 200, output_path, sample_data or None)
 
         if os.path.exists(output_path):
             size = os.path.getsize(output_path)
             print(f"\n✅ Done — {filename} ({size:,} bytes)")
         else:
-            print("❌ Code ran but no file created.")
-            print("Generated code:")
-            print(code[:2000])
+            print("❌ No file created.")
             sys.exit(1)
 
+    except json.JSONDecodeError as e:
+        print(f"❌ AI didn't return valid JSON: {e}")
+        print(f"Raw response:\n{raw[:1000]}")
+        sys.exit(1)
     except Exception as e:
         print(f"❌ Error: {e}")
         traceback.print_exc()
-        if os.path.exists("_generated_code.py"):
-            print("\nGenerated code saved to _generated_code.py")
         sys.exit(1)
 
 
