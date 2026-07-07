@@ -2,7 +2,7 @@
 
 **Describe any spreadsheet in plain English → get a fully formatted Excel file.**
 
-A standalone Python CLI tool that generates professional Excel spreadsheets from natural language descriptions using Claude AI, or step-by-step without any API.
+No install needed. Run it directly from GitHub, or download and run locally.
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -10,7 +10,25 @@ A standalone Python CLI tool that generates professional Excel spreadsheets from
 
 ---
 
-## ✨ What It Does
+## ☁️ Use It From GitHub (No Install)
+
+**Anyone with access to this repo can generate Excel files directly from the browser:**
+
+1. Go to the **[Actions](../../actions)** tab
+2. Click **"📊 Build Excel File"** on the left
+3. Click **"Run workflow"**
+4. Type what spreadsheet you need in plain English
+5. Give it a file name
+6. Click the green **"Run workflow"** button
+7. Wait ~30 seconds → click the completed run → download your `.xlsx` from **Artifacts**
+
+That's it. No Python, no install, no API key on your end.
+
+> **Repo owner setup (one time):** Go to repo **Settings → Secrets and variables → Actions → New repository secret** → Name: `ANTHROPIC_API_KEY` → paste your key from [console.anthropic.com](https://console.anthropic.com)
+
+---
+
+## 💻 Use It Locally (Optional)
 
 **AI Mode** — Type something like:
 
