@@ -91,7 +91,9 @@ def main():
     # ── Build ──
     wb = Workbook()
     ws = wb.active
-    ws.title = title[:31]
+    # Sanitize sheet title (Excel doesn't allow : \ / ? * [ ] in sheet names)
+    safe_title = re.sub(r'[:\\/?*\[\]]', '-', title)
+    ws.title = safe_title[:31]
     ws.sheet_view.showGridLines = False
 
     for i, col in enumerate(all_columns, 1):
