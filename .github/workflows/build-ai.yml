@@ -1,0 +1,35 @@
+name: 🤖 Build Excel (AI — Free)
+
+on:
+  workflow_dispatch:
+    inputs:
+      description:
+        description: "Describe the spreadsheet you need in plain English"
+        required: true
+        type: string
+      filename:
+        description: "File name (without .xlsx)"
+        required: false
+        default: "My_Spreadsheet"
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install openpyxl google-generativeai
+      - name: Generate with AI
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DESCRIPTION: ${{ inputs.description }}
+          FILE_NAME: ${{ inputs.filename }}
+        run: python build_ai.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.filename || 'My_Spreadsheet' }}
+          path: "*.xlsx"
+          retention-days: 90

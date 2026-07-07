@@ -1,0 +1,63 @@
+name: 📊 Build Excel (Simple Form)
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Sheet title"
+        required: true
+        type: string
+      status_filter:
+        description: "Add a status dropdown with row coloring?"
+        required: true
+        type: choice
+        options:
+          - "Yes"
+          - "No"
+      status_options:
+        description: "Status options separated by | (e.g. Pending | Fixed | Escalated)  — leave blank if No above"
+        required: false
+        type: string
+      columns:
+        description: "Your columns separated by commas (e.g. Name, Date, Department, Notes)"
+        required: true
+        type: string
+      column_types:
+        description: "Type for each column in same order: text / date / number / currency / long  (e.g. text, date, text, long)  — leave blank for all text"
+        required: false
+        type: string
+      rows:
+        description: "Number of blank rows to pre-format"
+        required: false
+        default: "200"
+        type: string
+      filename:
+        description: "File name (without .xlsx)"
+        required: false
+        default: "My_Spreadsheet"
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install openpyxl
+      - name: Generate spreadsheet
+        env:
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_STATUS: ${{ inputs.status_filter }}
+          INPUT_STATUS_OPTS: ${{ inputs.status_options }}
+          INPUT_COLUMNS: ${{ inputs.columns }}
+          INPUT_TYPES: ${{ inputs.column_types }}
+          INPUT_ROWS: ${{ inputs.rows }}
+          INPUT_FILENAME: ${{ inputs.filename }}
+        run: python build_simple.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.filename || 'My_Spreadsheet' }}
+          path: "*.xlsx"
+          retention-days: 90
