@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Builder — Free Spreadsheet Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --navy: #1B2A4A;
+    --gold: #D4AF37;
+    --gold-dim: #B8962E;
+    --bg: #0F1923;
+    --surface: #162231;
+    --surface-2: #1D2D40;
+    --border: #2A3E56;
+    --text: #E8ECF1;
+    --text-dim: #8A9BB5;
+    --white: #FFFFFF;
+    --red: #E74C4C;
+    --green: #4CAF50;
+    --radius: 8px;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding: 28px 24px 24px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: -0.5px;
+  }
+  .header h1 span { color: var(--gold); }
+  .header p {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-top: 6px;
+  }
+
+  /* ── Container ── */
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 24px 16px 80px;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 4px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    padding: 12px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: var(--text); background: var(--surface-2); }
+  .tab.active {
+    background: var(--gold);
+    color: var(--navy);
+  }
+
+  /* ── Panels ── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Form Elements ── */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* ── Column List ── */
+  .col-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+
+  .col-row {
+    display: grid;
+    grid-template-columns: 1fr 130px auto auto;
+    gap: 8px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+  }
+  .col-row.has-opts {
+    grid-template-columns: 1fr 130px auto auto;
+    grid-template-rows: auto auto;
+  }
+  .col-row input, .col-row select {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .opts-row {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  .opts-row input {
+    width: 100%;
+    font-size: 12px;
+    padding: 7px 10px;
+    background: var(--surface-2);
+  }
+
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s;
+  }
+  .btn-icon:hover { border-color: var(--text-dim); color: var(--text); }
+  .btn-icon.remove:hover { border-color: var(--red); color: var(--red); }
+
+  .btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-add:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ── Sample Data ── */
+  .sample-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── Generate Button ── */
+  .btn-generate {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: var(--gold);
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin-top: 24px;
+    transition: background 0.2s;
+  }
+  .btn-generate:hover { background: var(--gold-dim); }
+  .btn-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Status ── */
+  .status {
+    text-align: center;
+    padding: 12px;
+    margin-top: 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    display: none;
+  }
+  .status.success {
+    display: block;
+    background: rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    color: var(--green);
+  }
+  .status.error {
+    display: block;
+    background: rgba(231, 76, 76, 0.15);
+    border: 1px solid rgba(231, 76, 76, 0.3);
+    color: var(--red);
+  }
+  .status.loading {
+    display: block;
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    color: var(--gold);
+  }
+
+  /* ── Row Layout ── */
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 140px; gap: 12px; }
+
+  /* ── Info Box ── */
+  .info-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+  .info-box code {
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--gold);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  .footer a { color: var(--gold); text-decoration: none; }
+
+  /* ── Preview Table ── */
+  .preview-wrap {
+    overflow-x: auto;
+    margin-top: 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    display: none;
+  }
+  .preview-wrap.show { display: block; }
+  .preview-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .preview-wrap th {
+    background: var(--navy);
+    color: var(--white);
+    padding: 8px 10px;
+    text-align: center;
+    font-weight: 600;
+    border-bottom: 2px solid var(--gold);
+    white-space: nowrap;
+  }
+  .preview-wrap td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    text-align: center;
+  }
+  .preview-wrap tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .preview-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Mobile ── */
+  @media (max-width: 600px) {
+    .col-row { grid-template-columns: 1fr 110px auto auto; }
+    .row-2, .row-3 { grid-template-columns: 1fr; }
+    .header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 Excel <span>Builder</span></h1>
+  <p>Build formatted spreadsheets instantly — free, no login, no install</p>
+</div>
+
+<div class="container">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('manual')">🛠️ Manual Builder</button>
+    <button class="tab" onclick="switchTab('ai')">🤖 AI Builder</button>
+  </div>
+
+  <!-- ═══ MANUAL PANEL ═══ -->
+  <div id="panel-manual" class="panel active">
+
+    <div class="row-3">
+      <div class="field">
+        <label>Spreadsheet Title</label>
+        <input type="text" id="m-title" placeholder="e.g. Gate & Barrier Outage Tracker" value="">
+      </div>
+      <div class="field">
+        <label>File Name</label>
+        <input type="text" id="m-filename" placeholder="e.g. Outage_Tracker" value="">
+      </div>
+      <div class="field">
+        <label>Blank Rows</label>
+        <input type="number" id="m-rows" value="200" min="10" max="2000">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Columns</label>
+      <div id="col-list" class="col-list"></div>
+      <button class="btn-add" onclick="addColumn()">+ Add Column</button>
+    </div>
+
+    <div class="field">
+      <label>Sample Data <span style="font-weight:400;text-transform:none;">(optional)</span></label>
+      <textarea id="m-sample" placeholder="One row per line, values separated by |&#10;e.g. Main Gate | 08:30 AM | John Smith | Fixed"></textarea>
+      <div class="sample-hint">Each line = one row. Separate values with <code>|</code> in the same order as your columns.</div>
+    </div>
+
+    <p class="preview-label">Preview</p>
+    <div id="preview" class="preview-wrap"></div>
+
+    <button class="btn-generate" onclick="generateManual()">⬇ Generate & Download Excel</button>
+    <div id="status-manual" class="status"></div>
+  </div>
+
+  <!-- ═══ AI PANEL ═══ -->
+  <div id="panel-ai" class="panel">
+
+    <div class="info-box">
+      Describe any spreadsheet in plain English and AI will design the columns, types, dropdowns, and sample data for you. Uses <strong>Groq</strong> (free). Get a key at <a href="https://console.groq.com" target="_blank" style="color:var(--gold)">console.groq.com</a> — no credit card needed. Your key stays in your browser only.
+    </div>
+
+    <div class="field">
+      <label>Your Groq API Key</label>
+      <input type="text" id="ai-key" placeholder="gsk_...">
+    </div>
+
+    <div class="field">
+      <label>Describe your spreadsheet</label>
+      <textarea id="ai-desc" rows="5" placeholder="e.g. Employee attendance tracker with name, department, date, clock in, clock out, total hours, overtime, and a status dropdown with Present, Absent, Late, Half Day. Include sample data for 3 employees."></textarea>
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label>File Name</label>
+        <input type="text" id="ai-filename" placeholder="e.g. Attendance_Tracker">
+      </div>
+      <div class="field">
+        <label>Blank Rows</label>
+        <input type="number" id="ai-rows" value="200" min="10" max="2000">
+      </div>
+    </div>
+
+    <button class="btn-generate" onclick="generateAI()">🤖 Generate with AI</button>
+    <div id="status-ai" class="status"></div>
+  </div>
+
+  <div class="footer">
+    Built by <a href="https://github.com/shinrising3-debug" target="_blank">shinrising3-debug</a> · <a href="https://github.com/shinrising3-debug/excel-builder" target="_blank">GitHub Repo</a> · MIT License
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  PALETTE — matches the Python generate_ci.py exactly
+// ═══════════════════════════════════════════════════════════════════
+const P = {
+  DARK_BG:   '1B2A4A',
+  GOLD:      'D4AF37',
+  WHITE:     'FFFFFF',
+  OFF_WHITE: 'F8F9FA',
+  MID_GRAY:  'CED4DA',
+  TXT:       '212529',
+  MUTED:     '6C757D',
+  HDR_LINE:  '0F1B33',
+};
+
+const CF_COLORS = [
+  'FFD1E7DD', 'FFFFF3CD', 'FFF8D7DA', 'FFCFE2FF',
+  'FFE2D9F3', 'FFFDE8CD', 'FFD4EDDA', 'FFFFF0F0',
+];
+
+const WIDTH_MAP = { text: 22, number: 14, currency: 16, date: 16, dropdown: 20, long: 42 };
+const CENTER_TYPES = new Set(['number', 'currency', 'date', 'dropdown']);
+
+// ═══════════════════════════════════════════════════════════════════
+//  TAB SWITCH
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(which) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (which === 'manual' ? i === 0 : i === 1));
+  });
+  document.getElementById('panel-manual').classList.toggle('active', which === 'manual');
+  document.getElementById('panel-ai').classList.toggle('active', which === 'ai');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  COLUMN BUILDER
+// ═══════════════════════════════════════════════════════════════════
+let columns = [];
+let colId = 0;
+
+function addColumn(name = '', type = 'text', opts = '') {
+  const id = colId++;
+  columns.push({ id, name, type, opts });
+  renderColumns();
+}
+
+function removeColumn(id) {
+  columns = columns.filter(c => c.id !== id);
+  renderColumns();
+  updatePreview();
+}
+
+function moveColumn(id, dir) {
+  const idx = columns.findIndex(c => c.id === id);
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= columns.length) return;
+  [columns[idx], columns[newIdx]] = [columns[newIdx], columns[idx]];
+  renderColumns();
+  updatePreview();
+}
+
+function updateCol(id, field, val) {
+  const col = columns.find(c => c.id === id);
+  if (col) {
+    col[field] = val;
+    if (field === 'type') renderColumns();
+    updatePreview();
+  }
+}
+
+function renderColumns() {
+  const list = document.getElementById('col-list');
+  list.innerHTML = columns.map((c, i) => {
+    const showOpts = c.type === 'dropdown';
+    return `
+      <div class="col-row ${showOpts ? 'has-opts' : ''}">
+        <input type="text" value="${esc(c.name)}" placeholder="Column name"
+               oninput="updateCol(${c.id},'name',this.value)">
+        <select onchange="updateCol(${c.id},'type',this.value)">
+          <option value="text" ${c.type==='text'?'selected':''}>Text</option>
+          <option value="date" ${c.type==='date'?'selected':''}>Date</option>
+          <option value="number" ${c.type==='number'?'selected':''}>Number</option>
+          <option value="currency" ${c.type==='currency'?'selected':''}>Currency</option>
+          <option value="long" ${c.type==='long'?'selected':''}>Long Text</option>
+          <option value="dropdown" ${c.type==='dropdown'?'selected':''}>Dropdown</option>
+        </select>
+        <button class="btn-icon" onclick="moveColumn(${c.id},${i===0?1:-1})" title="Move">↕</button>
+        <button class="btn-icon remove" onclick="removeColumn(${c.id})" title="Remove">✕</button>
+        ${showOpts ? `<div class="opts-row">
+          <input type="text" value="${esc(c.opts)}" placeholder="Options separated by | e.g. Pending | Fixed | Escalated"
+                 oninput="updateCol(${c.id},'opts',this.value)">
+        </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function esc(s) { return s.replace(/"/g, '&quot;'); }
+
+function updatePreview() {
+  const wrap = document.getElementById('preview');
+  const valid = columns.filter(c => c.name.trim());
+  if (!valid.length) { wrap.classList.remove('show'); return; }
+  wrap.classList.add('show');
+  const ths = '<th>#</th>' + valid.map(c => `<th>${c.name}</th>`).join('');
+  const sample = document.getElementById('m-sample').value.trim();
+  let rows = '';
+  if (sample) {
+    sample.split('\n').slice(0, 3).forEach((line, i) => {
+      const vals = line.split('|').map(v => v.trim());
+      rows += `<tr><td>${i+1}</td>` + valid.map((_, j) => `<td>${vals[j]||''}</td>`).join('') + '</tr>';
+    });
+  } else {
+    rows = `<tr><td>1</td>` + valid.map(() => '<td style="color:#555">—</td>').join('') + '</tr>';
+  }
+  wrap.innerHTML = `<table><tr>${ths}</tr>${rows}</table>`;
+}
+
+// Start with 3 blank columns
+addColumn('', 'text');
+addColumn('', 'text');
+addColumn('', 'text');
+
+document.getElementById('m-sample').addEventListener('input', updatePreview);
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXCEL GENERATION — uses ExcelJS, matches Python output exactly
+// ═══════════════════════════════════════════════════════════════════
+function argb(hex) { return 'FF' + hex; }
+function thinBorder(color) {
+  return { style: 'thin', color: { argb: argb(color || P.MID_GRAY) } };
+}
+function border(color) {
+  const s = thinBorder(color);
+  return { top: s, bottom: s, left: s, right: s };
+}
+
+async function buildExcel(title, cols, numRows, sampleData) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(title.substring(0, 31));
+  ws.views = [{ showGridLines: false }];
+
+  // Prepend # column
+  const allCols = [{ name: '#', type: 'number', width: 5, options: null }, ...cols];
+  const totalCols = allCols.length;
+
+  // Column widths
+  allCols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
+
+  // Row 1: Gold bar
+  const r1 = ws.getRow(1);
+  r1.height = 4;
+  for (let i = 1; i <= totalCols; i++) {
+    const cell = ws.getCell(1, i);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.GOLD) } };
+  }
+
+  // Row 2: Title
+  ws.mergeCells(2, 1, 2, totalCols);
+  const titleCell = ws.getCell(2, 1);
+  titleCell.value = title.toUpperCase();
+  titleCell.font = { name: 'Aptos', bold: true, size: 16, color: { argb: argb(P.DARK_BG) } };
+  titleCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(2).height = 38;
+
+  // Row 3: Subtitle
+  ws.mergeCells(3, 1, 3, totalCols);
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateStr = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2,'0')}, ${now.getFullYear()}`;
+  const subCell = ws.getCell(3, 1);
+  subCell.value = `Generated ${dateStr}  ·  ${numRows} rows pre-formatted`;
+  subCell.font = { name: 'Aptos', size: 10, color: { argb: argb(P.MUTED) } };
+  subCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(3).height = 22;
+
+  // Row 4: spacer
+  ws.getRow(4).height = 6;
+
+  // Row 5: Headers
+  const hdrRow = 5;
+  ws.getRow(hdrRow).height = 30;
+  for (let i = 0; i < allCols.length; i++) {
+    const cell = ws.getCell(hdrRow, i + 1);
+    cell.value = allCols[i].name;
+    cell.font = { name: 'Aptos', bold: true, size: 10, color: { argb: argb(P.WHITE) } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.DARK_BG) } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = {
+      left: thinBorder(P.HDR_LINE), right: thinBorder(P.HDR_LINE),
+      top: thinBorder(P.HDR_LINE),
+      bottom: { style: 'medium', color: { argb: argb(P.GOLD) } },
+    };
+  }
+
+  // Data rows
+  const dataStart = 6;
+  const endRow = dataStart + numRows - 1;
+
+  for (let row = dataStart; row <= endRow; row++) {
+    const isAlt = (row - dataStart) % 2 === 1;
+    const fill = {
+      type: 'pattern', pattern: 'solid',
+      fgColor: { argb: argb(isAlt ? P.OFF_WHITE : P.WHITE) },
+    };
+    ws.getRow(row).height = 28;
+    for (let i = 0; i < allCols.length; i++) {
+      const col = allCols[i];
+      const cell = ws.getCell(row, i + 1);
+      cell.font = { name: 'Aptos', size: 10, color: { argb: argb(P.TXT) } };
+      cell.border = border();
+      cell.fill = fill;
+      const h = CENTER_TYPES.has(col.type) || col.name === '#' ? 'center' : 'left';
+      cell.alignment = { horizontal: h, vertical: 'middle', wrapText: true };
+      if (col.type === 'date') cell.numFmt = 'mm/dd/yyyy';
+      if (col.type === 'currency') cell.numFmt = '$#,##0.00';
+    }
+  }
+
+  // Sample data
+  if (sampleData) {
+    const lines = sampleData.trim().split('\n').filter(l => l.trim());
+    lines.forEach((line, ri) => {
+      const row = dataStart + ri;
+      if (row > endRow) return;
+      const vals = line.split('|').map(v => v.trim());
+      ws.getCell(row, 1).value = ri + 1;
+      vals.forEach((val, ci) => {
+        if (ci + 2 > totalCols) return;
+        ws.getCell(row, ci + 2).value = val;
+      });
+      ws.getRow(row).height = 34;
+    });
+  }
+
+  // Dropdowns via data validation
+  allCols.forEach((col, i) => {
+    if (col.type === 'dropdown' && col.options && col.options.length) {
+      const colLetter = String.fromCharCode(65 + i > 90 ? 65 : 65 + i);
+      // ExcelJS uses column letter for ranges
+      const letter = getColLetter(i + 1);
+      for (let row = dataStart; row <= endRow; row++) {
+        ws.getCell(row, i + 1).dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"' + col.options.join(',') + '"'],
+          showDropDown: true,  // ExcelJS: true = show arrow
+          promptTitle: `Select ${col.name}`,
+        };
+      }
+    }
+  });
+
+  // Conditional formatting on the last dropdown column
+  const ddCols = allCols.map((c, i) => ({ col: c, idx: i })).filter(x => x.col.type === 'dropdown' && x.col.options);
+  if (ddCols.length) {
+    const last = ddCols[ddCols.length - 1];
+    const cfLetter = getColLetter(last.idx + 1);
+    const rangeStr = `A${dataStart}:${getColLetter(totalCols)}${endRow}`;
+    last.col.options.forEach((opt, oi) => {
+      const cfColor = CF_COLORS[oi % CF_COLORS.length];
+      ws.addConditionalFormatting({
+        ref: rangeStr,
+        rules: [{
+          type: 'expression',
+          formulae: [`$${cfLetter}${dataStart}="${opt}"`],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: cfColor } },
+          },
+          priority: oi + 1,
+        }],
+      });
+    });
+  }
+
+  // Freeze panes
+  ws.views = [{ state: 'frozen', ySplit: dataStart - 1, showGridLines: false }];
+
+  // Print setup
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
+  return wb;
+}
+
+function getColLetter(n) {
+  let s = '';
+  while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+  return s;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DOWNLOAD TRIGGER
+// ═══════════════════════════════════════════════════════════════════
+async function downloadWorkbook(wb, filename) {
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.xlsx') ? filename : filename + '.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MANUAL MODE
+// ═══════════════════════════════════════════════════════════════════
+async function generateManual() {
+  const status = document.getElementById('status-manual');
+  const title = document.getElementById('m-title').value.trim() || 'My Spreadsheet';
+  const filename = document.getElementById('m-filename').value.trim() || 'Spreadsheet';
+  const numRows = Math.min(2000, Math.max(10, parseInt(document.getElementById('m-rows').value) || 200));
+  const sample = document.getElementById('m-sample').value.trim();
+
+  const validCols = columns.filter(c => c.name.trim());
+  if (!validCols.length) {
+    showStatus(status, 'error', 'Add at least one column with a name.');
+    return;
+  }
+
+  const cols = validCols.map(c => ({
+    name: c.name.trim(),
+    type: c.type,
+    width: WIDTH_MAP[c.type] || 22,
+    options: c.type === 'dropdown' && c.opts ? c.opts.split('|').map(o => o.trim()).filter(Boolean) : null,
+  }));
+
+  showStatus(status, 'loading', 'Building your spreadsheet...');
+
+  try {
+    const wb = await buildExcel(title, cols, numRows, sample || null);
+    await downloadWorkbook(wb, filename);
+    showStatus(status, 'success', `✅ ${filename}.xlsx downloaded!`);
+  } catch (err) {
+    showStatus(status, 'error', 'Error: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AI MODE
+// ═══════════════════════════════════════════════════════════════════
+async function generateAI() {
+  const status = document.getElementById('status-ai');
+  const key = document.getElementById('ai-key').value.trim();
+  const desc = document.getElementById('ai-desc').value.trim();
+  const filename = document.getElementById('ai-filename').value.trim() || 'AI_Spreadsheet';
+  const numRows = Math.min(2000, Math.max(10, parseInt(document.getElementById('ai-rows').value) || 200));
+
+  if (!key) { showStatus(status, 'error', 'Paste your free Groq API key.'); return; }
+  if (!desc) { showStatus(status, 'error', 'Describe what spreadsheet you want.'); return; }
+
+  showStatus(status, 'loading', 'AI is designing your spreadsheet...');
+
+  const sysPrompt = `You design Excel spreadsheet specs. Given a user's description, respond with ONLY valid JSON — no markdown, no backticks, no explanation. The JSON must have exactly these keys:
+{
+  "title": "Sheet Title",
+  "columns": "Name, Date (date), Amount (currency), Status (dropdown: Pending | Fixed | Done), Notes (long)",
+  "sample_data": "John | 01/15/2025 | 250.00 | Pending | First entry\\nJane | 01/16/2025 | 300.00 | Fixed | Second entry"
+}
+
+Column format rules:
+- Plain text columns: just the name
+- Date columns: Name (date)
+- Number columns: Name (number)
+- Currency columns: Name (currency)
+- Long text columns: Name (long)
+- Dropdown columns: Name (dropdown: Option1 | Option2 | Option3)
+
+Sample data: one row per line (use \\n), values separated by | in column order.
+Include 3-5 rows of realistic sample data.`;
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: desc },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    let raw = data.choices?.[0]?.message?.content || '';
+    raw = raw.replace(/```json|```/g, '').trim();
+    const spec = JSON.parse(raw);
+
+    if (!spec.title || !spec.columns) throw new Error('AI returned incomplete spec');
+
+    // Parse columns using same logic as Python
+    const cols = parseColumnsFromSpec(spec.columns);
+    if (!cols.length) throw new Error('Could not parse columns from AI output');
+
+    showStatus(status, 'loading', `Building ${cols.length}-column spreadsheet...`);
+
+    const wb = await buildExcel(spec.title, cols, numRows, spec.sample_data || null);
+    await downloadWorkbook(wb, filename);
+    showStatus(status, 'success', `✅ ${filename}.xlsx downloaded! (${cols.length} columns, ${spec.title})`);
+  } catch (err) {
+    showStatus(status, 'error', 'Error: ' + err.message);
+  }
+}
+
+// Parse the Python-format column string
+function parseColumnsFromSpec(raw) {
+  // Split on commas not inside parentheses
+  const parts = raw.split(/,\s*(?![^(]*\))/);
+  return parts.map(part => {
+    part = part.trim();
+    if (!part) return null;
+    const match = part.match(/^(.+?)\s*\(\s*(.*?)\s*\)\s*$/);
+    if (match) {
+      const name = match[1].trim();
+      const typeStr = match[2].trim().toLowerCase();
+      if (typeStr.startsWith('dropdown')) {
+        const optsMatch = typeStr.match(/:\s*(.+)/);
+        const options = optsMatch ? optsMatch[1].split('|').map(o => o.trim()) : ['Option 1', 'Option 2'];
+        return { name, type: 'dropdown', width: WIDTH_MAP.dropdown, options };
+      }
+      const type = ['date','number','currency','long','text'].includes(typeStr) ? typeStr : 'text';
+      return { name, type, width: WIDTH_MAP[type], options: null };
+    }
+    return { name: part, type: 'text', width: WIDTH_MAP.text, options: null };
+  }).filter(Boolean);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STATUS HELPER
+// ═══════════════════════════════════════════════════════════════════
+function showStatus(el, type, msg) {
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+</script>
+
+</body>
+</html>
