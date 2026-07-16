@@ -1,8 +1,14 @@
 # 📊 Excel Builder
 
-**Build any formatted Excel file directly from GitHub. No install, no coding.**
+**Build any formatted Excel file directly from your browser. No install, no login, no coding.**
 
-Two ways to use — pick whichever fits:
+## 🌐 [Use it now → shinrising3-debug.github.io/excel-builder](https://shinrising3-debug.github.io/excel-builder/)
+
+Works on any device — phone, tablet, desktop. No account needed.
+
+---
+
+Also available as GitHub Actions workflows:
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
