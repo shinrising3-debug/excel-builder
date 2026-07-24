@@ -59,5 +59,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.filename || 'My_Spreadsheet' }}
+          retention-days: 7
           path: "*.xlsx"
           retention-days: 90
