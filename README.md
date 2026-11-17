@@ -49,19 +49,19 @@ A step-by-step form that asks you exactly what you need:
 
 ---
 
-## 🤖 Option 2: AI Mode (Free — Groq)
+## 🤖 Option 2: AI Mode (Free)
 
 Just describe what you want in plain English:
 
-1. Go to **[Actions](../../actions)** → click **"🤖 Build Excel (AI — Free)"**
-2. Click **"Run workflow"**
-3. Type your description, for example:
+**On the website:** Go to the **AI Builder** tab, type your description, and click Generate. No API key needed — it just works.
+
+**Via GitHub Actions:** Go to **[Actions](../../actions)** → click **"🤖 Build Excel (AI — Free)"** → type your description → download from **Artifacts**.
+
+Example prompt:
 
 > Employee attendance tracker with name, department, date, clock in time, clock out time, total hours, overtime hours, and a status dropdown with Present, Absent, Late, Half Day. Include sample data for 3 employees.
 
-4. Click **Run workflow** → wait 30 sec → download from **Artifacts**
-
-Powered by Google Groq — Llama 3.3 70B (free, no credit card, fastest inference available).
+Powered by Llama 3.1 70B via Cloudflare Workers AI — free, no API key needed for website visitors.
 
 ---
 
@@ -100,6 +100,8 @@ Download `excel_builder.py` + `Excel_Builder.bat` → double-click the `.bat`:
 | `generate_ci.py` | Advanced column-syntax builder |
 | `excel_builder.py` | Local CLI tool (both modes) |
 | `Excel_Builder.bat` | Windows launcher for local tool |
+| `worker/index.js` | Cloudflare Worker proxy for AI mode |
+| `worker/wrangler.toml` | Worker deployment config |
 
 ---
 
@@ -107,10 +109,33 @@ Download `excel_builder.py` + `Excel_Builder.bat` → double-click the `.bat`:
 
 The **Simple Form** workflow needs zero secrets — it's pure Python.
 
-The **AI workflow** needs a free Groq key:
+The **AI workflow** (GitHub Actions) needs a free Groq key:
 1. Get a key at [console.groq.com](https://console.groq.com)
 2. Go to repo **Settings → Secrets → Actions → New secret**
 3. Name: `GROQ_API_KEY` — paste your key
+
+### AI Proxy for the Website (Cloudflare Worker)
+
+The website's AI builder uses **Cloudflare Workers AI** with a built-in Llama 3.1 70B model — **no external API key needed**. Free tier: 10,000 AI requests/day.
+
+**One-time deploy:**
+
+```bash
+cd worker
+npm install -g wrangler          # install Cloudflare CLI
+npx wrangler login               # sign in to Cloudflare (free account)
+npx wrangler deploy              # deploy — that's it!
+```
+
+After deploying, copy your worker URL (e.g. `https://excel-builder-ai.yourname.workers.dev`) and update the `AI_PROXY_URL` in `docs/index.html`.
+
+**Optional rate limiting with KV:**
+
+```bash
+npx wrangler kv namespace create RATE_LIMITER
+# Copy the ID from the output, then uncomment and fill in worker/wrangler.toml
+npx wrangler deploy
+```
 
 ---
 

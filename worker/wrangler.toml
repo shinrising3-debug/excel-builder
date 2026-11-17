@@ -1,0 +1,14 @@
+name = "excel-builder-ai"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+# Workers AI — built-in, no external API key needed
+[ai]
+binding = "AI"
+
+# Optional: KV for rate limiting
+# Create with: npx wrangler kv namespace create RATE_LIMITER
+# Then uncomment and paste the ID below:
+# [[kv_namespaces]]
+# binding = "RATE_LIMITER"
+# id = "<your-kv-namespace-id>"

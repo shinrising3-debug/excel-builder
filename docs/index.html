@@ -384,12 +384,7 @@
   <div id="panel-ai" class="panel">
 
     <div class="info-box">
-      Describe any spreadsheet in plain English and AI will design the columns, types, dropdowns, and sample data for you. Uses <strong>Groq</strong> (free). Get a key at <a href="https://console.groq.com" target="_blank" style="color:var(--gold)">console.groq.com</a> — no credit card needed. Your key stays in your browser only.
-    </div>
-
-    <div class="field">
-      <label>Your Groq API Key</label>
-      <input type="text" id="ai-key" placeholder="gsk_...">
+      Describe any spreadsheet in plain English and AI will design the columns, types, dropdowns, and sample data for you. Powered by <strong>Llama 3.3 70B</strong> — completely free, no API key needed.
     </div>
 
     <div class="field">
@@ -760,62 +755,35 @@ async function generateManual() {
 // ═══════════════════════════════════════════════════════════════════
 //  AI MODE
 // ═══════════════════════════════════════════════════════════════════
+// ── AI Proxy URL ──
+// After deploying your Cloudflare Worker, replace this with your worker URL
+const AI_PROXY_URL = 'https://excel-builder-ai.<YOUR-SUBDOMAIN>.workers.dev/generate';
+
 async function generateAI() {
   const status = document.getElementById('status-ai');
-  const key = document.getElementById('ai-key').value.trim();
   const desc = document.getElementById('ai-desc').value.trim();
   const filename = document.getElementById('ai-filename').value.trim() || 'AI_Spreadsheet';
   const numRows = Math.min(2000, Math.max(10, parseInt(document.getElementById('ai-rows').value) || 200));
 
-  if (!key) { showStatus(status, 'error', 'Paste your free Groq API key.'); return; }
   if (!desc) { showStatus(status, 'error', 'Describe what spreadsheet you want.'); return; }
 
   showStatus(status, 'loading', 'AI is designing your spreadsheet...');
 
-  const sysPrompt = `You design Excel spreadsheet specs. Given a user's description, respond with ONLY valid JSON — no markdown, no backticks, no explanation. The JSON must have exactly these keys:
-{
-  "title": "Sheet Title",
-  "columns": "Name, Date (date), Amount (currency), Status (dropdown: Pending | Fixed | Done), Notes (long)",
-  "sample_data": "John | 01/15/2025 | 250.00 | Pending | First entry\\nJane | 01/16/2025 | 300.00 | Fixed | Second entry"
-}
-
-Column format rules:
-- Plain text columns: just the name
-- Date columns: Name (date)
-- Number columns: Name (number)
-- Currency columns: Name (currency)
-- Long text columns: Name (long)
-- Dropdown columns: Name (dropdown: Option1 | Option2 | Option3)
-
-Sample data: one row per line (use \\n), values separated by | in column order.
-Include 3-5 rows of realistic sample data.`;
-
   try {
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const resp = await fetch(AI_PROXY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: desc },
-        ],
-        temperature: 0.3,
-        max_tokens: 2000,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: desc }),
     });
 
+    const data = await resp.json();
+
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
+      throw new Error(data?.error || `Server error ${resp.status}`);
     }
 
-    const data = await resp.json();
-    let raw = data.choices?.[0]?.message?.content || '';
-    raw = raw.replace(/```json|```/g, '').trim();
-    const spec = JSON.parse(raw);
-
-    if (!spec.title || !spec.columns) throw new Error('AI returned incomplete spec');
+    const spec = data.spec;
+    if (!spec || !spec.title || !spec.columns) throw new Error('AI returned incomplete spec');
 
     // Parse columns using same logic as Python
     const cols = parseColumnsFromSpec(spec.columns);
@@ -827,7 +795,11 @@ Include 3-5 rows of realistic sample data.`;
     await downloadWorkbook(wb, filename);
     showStatus(status, 'success', `✅ ${filename}.xlsx downloaded! (${cols.length} columns, ${spec.title})`);
   } catch (err) {
-    showStatus(status, 'error', 'Error: ' + err.message);
+    if (err.message.includes('Rate limit')) {
+      showStatus(status, 'error', '⏳ ' + err.message);
+    } else {
+      showStatus(status, 'error', 'Error: ' + err.message);
+    }
   }
 }
 
