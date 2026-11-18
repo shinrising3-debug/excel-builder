@@ -1070,35 +1070,39 @@ async function generateManual() {
 //  AI MODE — Multi-sheet with dashboard
 // ═══════════════════════════════════════════════════════════════════
 const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
+const AI_MODELS = ['openai-large', 'openai', 'openai-fast']; // GPT-4o → GPT-4o-mini → fallback
 
-const AI_SYSTEM_PROMPT = `You design professional Excel workbooks. Reply ONLY with valid JSON. No markdown, no backticks, no explanation.
+const AI_SYSTEM_PROMPT = `You are an Excel workbook designer. Reply with ONLY valid JSON — no markdown, no backticks, no text.
 
-SHEET TYPES:
-1. "data" — standard table (employees, inventory, transactions). Use columns + sample_data.
-2. "tracker" — compliance/status tracking with status columns and color-coded rows. Use columns + sample_data. Add a "Status" dropdown column. Great for training, tasks, audits, tickets, onboarding checklists.
-3. "reference" — section-based info/guide sheet (SOPs, procedures, contacts, site info, quick-ref guides). Uses "sections" array instead of columns. Each section: {"title":"...","color":"blue|green|yellow|red|purple|orange","rows":[["Label","Value"],...]}.
-4. "dashboard" — KPI summary. Uses kpis + summary_tables. MUST be last sheet.
+OUTPUT FORMAT:
+{"workbook_title":"...","sheets":[...]}
 
-FORMAT:
-{"workbook_title":"...","sheets":[
-  {"title":"...","type":"data","columns":"...","sample_data":"..."},
-  {"title":"...","type":"tracker","columns":"...","sample_data":"..."},
-  {"title":"...","type":"reference","sections":[{"title":"...","color":"blue","rows":[["Key","Value"]]}]},
-  {"title":"Dashboard","type":"dashboard","kpis":[{"label":"...","value":"...","format":"currency|percentage|number","color":"blue|green|red|orange|purple"}],"summary_tables":[{"title":"...","headers":["A","B"],"rows":[["x","y"]]}]}
-]}
+4 SHEET TYPES:
 
-Column format: "Name (type)" — types: text, date, number, currency, percentage, long, email, phone, time, dropdown
-Dropdown: "Status (dropdown: Active|Inactive|Pending)"
-sample_data: pipe-separated values, newline between rows. 3-5 realistic rows.
+1. DATA — tables with 6-10 columns.
+{"title":"...","type":"data","columns":"Name (text), Email (email), Hire Date (date), Department (text), Salary (currency), Hours Worked (number), Overtime Hours (number), Total Pay (currency)","sample_data":"John Smith|john@co.com|2024-01-15|Sales|55000|40|5|2800\nJane Doe|jane@co.com|2024-03-01|IT|62000|38|2|2500"}
 
-RULES:
-- Use 3-10 sheets. More sheets = more professional. Mix sheet types.
-- Tracker sheets MUST have a Status dropdown and a Date column.
-- Reference sheets: 2-6 sections each with 3-8 rows of key-value info. Use different colors per section.
-- Dashboard: 4-8 KPIs with mixed colors, 1-3 summary tables.
-- Use clear column names like "Hours Worked", "Unit Price", "Completion %" — the app auto-detects formulas.
-- Works for ANY domain: business, restaurant, school, HR, inventory, fitness, real estate, security, medical, construction, sports, etc.
-- Keep output compact. No formulas needed — the app adds those automatically.`;
+2. TRACKER — like data but with Status dropdown + Date column. 6-10 columns.
+{"title":"...","type":"tracker","columns":"Employee (text), Training Name (text), Assigned Date (date), Due Date (date), Status (dropdown: Not Started|In Progress|Completed|Overdue), Score (percentage), Instructor (text), Notes (long)","sample_data":"..."}
+
+3. REFERENCE — section-based info sheets. NO columns field.
+{"title":"...","type":"reference","sections":[{"title":"Section Name","color":"blue","rows":[["Label","Value"],["Label","Value"]]}]}
+Colors: blue, green, yellow, red, purple, orange. Use 3-5 sections, 3-6 rows each.
+
+4. DASHBOARD — KPIs + summary tables. MUST be the LAST sheet.
+{"title":"Dashboard","type":"dashboard","kpis":[{"label":"Total Revenue","value":"$125,000","format":"currency","color":"green"}],"summary_tables":[{"title":"Summary","headers":["Category","Count"],"rows":[["Active","45"]]}]}
+Use 4-6 KPIs with mixed colors (blue,green,red,orange,purple,navy,gold).
+
+COLUMN FORMAT: "Name (type)" — types: text, date, number, currency, percentage, long, email, phone, time, dropdown
+Dropdown: "Status (dropdown: Option1|Option2|Option3)"
+sample_data: pipe-separated, newline between rows. 2-3 rows only.
+
+CRITICAL RULES:
+- Generate 4-8 sheets. MUST include at least 1 dashboard as the last sheet.
+- EVERY data/tracker sheet MUST have 6-10 columns. Never less than 6.
+- Use descriptive column names for auto-formula detection: "Total Cost", "Hours Worked", "Completion %", "Unit Price", "Profit Margin"
+- Output ALL columns for every sheet. Do NOT truncate or abbreviate.
+- Keep sample_data short (2-3 rows) to save space.`;
 
 // Robust JSON extraction — handles backticks, truncation, trailing commas
 function extractJSON(raw) {
@@ -1466,7 +1470,7 @@ function autoDetectCF(cols) {
 }
 
 let _lastAICall = 0;
-const AI_COOLDOWN = 50000; // 50 seconds between calls
+const AI_COOLDOWN = 20000; // 20 seconds between calls (models rotate so rate limits are per-model)
 
 async function generateAI() {
   const status = document.getElementById('status-ai');
@@ -1490,10 +1494,10 @@ async function generateAI() {
   setProgress(10, 'Sending to AI...');
 
   try {
-    async function callAI(temp) {
+    async function callAI(model, temp) {
       _lastAICall = Date.now();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout for bigger models
       let r;
       try {
         r = await fetch(AI_API_URL, {
@@ -1501,7 +1505,7 @@ async function generateAI() {
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'openai-fast',
+            model,
             messages: [
               { role: 'system', content: AI_SYSTEM_PROMPT },
               { role: 'user', content: desc }
@@ -1522,7 +1526,7 @@ async function generateAI() {
             || errBody.includes('FREE_LIMIT') || errBody.includes('rate')
             || errBody.includes('limit') || errBody.includes('too many'))
           throw new Error('RATE_LIMIT');
-        throw new Error(`AI service error (${r.status})`);
+        throw new Error(`AI_ERROR_${r.status}`);
       }
       const d = await r.json();
       const content = d?.choices?.[0]?.message?.content;
@@ -1530,26 +1534,42 @@ async function generateAI() {
       return extractJSON(content);
     }
 
-    // Try once — only retry on JSON failure (not rate limit)
-    let spec;
-    try {
-      spec = await callAI(0.4);
-    } catch (e) {
-      if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 50 seconds and try again.');
-      throw e;
+    // Validate AI spec quality — returns true if acceptable
+    function specIsGood(s) {
+      if (!s || !s.sheets || !Array.isArray(s.sheets) || s.sheets.length < 2) return false;
+      const dataSheets = s.sheets.filter(sh => sh.type === 'data' || sh.type === 'tracker' || (!sh.type && sh.columns));
+      // Every data/tracker sheet must have at least 4 columns
+      for (const sh of dataSheets) {
+        const cols = (sh.columns || '').split(',').map(c => c.trim()).filter(Boolean);
+        if (cols.length < 4) return false;
+      }
+      return true;
     }
-    if (!spec) {
-      setProgress(30, 'Fixing AI response, retrying...');
-      await new Promise(ok => setTimeout(ok, 3000));
+
+    // Try models in order: openai-large (GPT-4o) → openai (GPT-4o-mini) → openai-fast
+    let spec = null;
+    for (let mi = 0; mi < AI_MODELS.length; mi++) {
+      const model = AI_MODELS[mi];
+      setProgress(10 + mi * 10, mi === 0 ? 'Sending to AI...' : `Trying backup model ${mi + 1}...`);
       try {
-        spec = await callAI(0.2);
+        spec = await callAI(model, 0.4);
+        if (specIsGood(spec)) break; // Good result, stop trying
+        spec = null; // Bad quality, try next model
       } catch (e) {
-        if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 50 seconds and try again.');
+        if (e.message === 'RATE_LIMIT') {
+          // Rate limited on this model — try next one
+          if (mi < AI_MODELS.length - 1) continue;
+          throw new Error('Rate limit hit — wait about 30 seconds and try again.');
+        }
+        if (e.message.startsWith('AI_ERROR_')) {
+          if (mi < AI_MODELS.length - 1) continue; // Try next model
+          throw new Error('AI service error — please try again.');
+        }
         throw e;
       }
     }
-    setProgress(45, 'Parsing workbook spec...');
-    if (!spec) throw new Error('AI returned invalid JSON — please try again (try a simpler description)');
+    setProgress(40, 'Validating workbook spec...');
+    if (!spec) throw new Error('AI could not generate a valid workbook — try a simpler description.');
 
     // Support both old single-sheet and new multi-sheet format
     let sheets;
@@ -1560,6 +1580,24 @@ async function generateAI() {
       sheets = [{ title: spec.title, type: 'data', columns: spec.columns, sample_data: spec.sample_data }];
     } else {
       throw new Error('AI returned an unrecognized format — please try again');
+    }
+
+    // ── POST-PROCESSING: fix common AI shortcomings ──
+    // Auto-generate dashboard if AI forgot one
+    const hasDash = sheets.some(s => s.type === 'dashboard');
+    if (!hasDash) {
+      const autoKpis = [];
+      const kpiColors = ['blue','green','orange','purple','red','navy'];
+      let ci = 0;
+      for (const sh of sheets) {
+        if (sh.type === 'reference') continue;
+        autoKpis.push({ label: `Total ${sh.title}`, value: '—', format: 'number', color: kpiColors[ci++ % kpiColors.length] });
+      }
+      if (autoKpis.length < 4) {
+        autoKpis.push({ label: 'Completion Rate', value: '85%', format: 'percentage', color: 'green' });
+        autoKpis.push({ label: 'Active Items', value: '24', format: 'number', color: 'blue' });
+      }
+      sheets.push({ title: 'Dashboard', type: 'dashboard', kpis: autoKpis, summary_tables: [{ title: 'Overview', headers: ['Sheet', 'Records'], rows: sheets.filter(s => s.type !== 'dashboard' && s.type !== 'reference').map(s => [s.title, '—']) }] });
     }
 
     setProgress(50, `Building ${sheets.length}-sheet workbook...`);
