@@ -384,7 +384,7 @@
   <div id="panel-ai" class="panel">
 
     <div class="info-box">
-      Describe any spreadsheet in plain English and AI will design the columns, types, dropdowns, and sample data for you. Powered by <strong>Llama 3.3 70B</strong> — completely free, no API key needed.
+      Describe any spreadsheet in plain English and AI will design the columns, types, dropdowns, and sample data for you. Powered by <strong>Pollinations AI</strong> — completely free, no API key needed.
     </div>
 
     <div class="field">
@@ -755,9 +755,9 @@ async function generateManual() {
 // ═══════════════════════════════════════════════════════════════════
 //  AI MODE
 // ═══════════════════════════════════════════════════════════════════
-// ── AI Proxy URL ──
-// After deploying your Cloudflare Worker, replace this with your worker URL
-const AI_PROXY_URL = 'https://excel-builder-ai.<YOUR-SUBDOMAIN>.workers.dev/generate';
+// ── Pollinations.ai (free, no key, browser-callable) ──
+const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
+const AI_SYSTEM_PROMPT = `You design Excel spreadsheet specs. Respond with ONLY valid JSON (no markdown, no backticks). Keys: title, columns, sample_data. Columns use type syntax like Name (date), Amount (currency), Status (dropdown: A|B|C), Notes (long). Sample data rows separated by newlines, values by |. Include 3-5 rows of realistic sample data.`;
 
 async function generateAI() {
   const status = document.getElementById('status-ai');
@@ -770,22 +770,40 @@ async function generateAI() {
   showStatus(status, 'loading', 'AI is designing your spreadsheet...');
 
   try {
-    const resp = await fetch(AI_PROXY_URL, {
+    const resp = await fetch(AI_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: desc }),
+      body: JSON.stringify({
+        model: 'openai-fast',
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: desc }
+        ],
+        temperature: 0.7
+      }),
     });
 
-    const data = await resp.json();
-
     if (!resp.ok) {
-      throw new Error(data?.error || `Server error ${resp.status}`);
+      const errBody = await resp.text();
+      if (resp.status === 402 || errBody.includes('FREE_LIMIT')) {
+        throw new Error('Rate limit — free tier allows 1 request per 45 seconds. Please wait and try again.');
+      }
+      throw new Error(`AI service error (${resp.status})`);
     }
 
-    const spec = data.spec;
-    if (!spec || !spec.title || !spec.columns) throw new Error('AI returned incomplete spec');
+    const data = await resp.json();
+    let raw = data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error('AI returned empty response');
 
-    // Parse columns using same logic as Python
+    // Strip markdown backticks if present
+    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    let spec;
+    try { spec = JSON.parse(raw); } catch { throw new Error('AI returned invalid JSON — please try again'); }
+
+    if (!spec.title || !spec.columns) throw new Error('AI returned incomplete spec');
+
+    // Parse columns using same logic
     const cols = parseColumnsFromSpec(spec.columns);
     if (!cols.length) throw new Error('Could not parse columns from AI output');
 

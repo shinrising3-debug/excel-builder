@@ -61,7 +61,9 @@ Example prompt:
 
 > Employee attendance tracker with name, department, date, clock in time, clock out time, total hours, overtime hours, and a status dropdown with Present, Absent, Late, Half Day. Include sample data for 3 employees.
 
-Powered by Llama 3.1 70B via Cloudflare Workers AI — free, no API key needed for website visitors.
+Powered by **Pollinations AI** — completely free, no API key, no server, no signup. Calls the AI directly from your browser.
+
+**Note:** Free tier rate limit is 1 request per 45 seconds per user IP.
 
 ---
 
@@ -95,13 +97,12 @@ Download `excel_builder.py` + `Excel_Builder.bat` → double-click the `.bat`:
 
 | File | Purpose |
 |---|---|
+| `docs/index.html` | Website frontend (AI + manual builder) |
 | `build_simple.py` | Simple form builder (GitHub Actions) |
 | `build_ai.py` | Groq AI builder (GitHub Actions) |
 | `generate_ci.py` | Advanced column-syntax builder |
 | `excel_builder.py` | Local CLI tool (both modes) |
 | `Excel_Builder.bat` | Windows launcher for local tool |
-| `worker/index.js` | Cloudflare Worker proxy for AI mode |
-| `worker/wrangler.toml` | Worker deployment config |
 
 ---
 
@@ -114,28 +115,7 @@ The **AI workflow** (GitHub Actions) needs a free Groq key:
 2. Go to repo **Settings → Secrets → Actions → New secret**
 3. Name: `GROQ_API_KEY` — paste your key
 
-### AI Proxy for the Website (Cloudflare Worker)
-
-The website's AI builder uses **Cloudflare Workers AI** with a built-in Llama 3.1 70B model — **no external API key needed**. Free tier: 10,000 AI requests/day.
-
-**One-time deploy:**
-
-```bash
-cd worker
-npm install -g wrangler          # install Cloudflare CLI
-npx wrangler login               # sign in to Cloudflare (free account)
-npx wrangler deploy              # deploy — that's it!
-```
-
-After deploying, copy your worker URL (e.g. `https://excel-builder-ai.yourname.workers.dev`) and update the `AI_PROXY_URL` in `docs/index.html`.
-
-**Optional rate limiting with KV:**
-
-```bash
-npx wrangler kv namespace create RATE_LIMITER
-# Copy the ID from the output, then uncomment and fill in worker/wrangler.toml
-npx wrangler deploy
-```
+The **website AI builder** needs nothing — it calls Pollinations.ai directly from the browser with zero config.
 
 ---
 
