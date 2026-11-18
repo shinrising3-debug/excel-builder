@@ -930,7 +930,7 @@ async function generateAI() {
       if (!r.ok) {
         const errBody = await r.text();
         if (r.status === 402 || errBody.includes('FREE_LIMIT'))
-          throw new Error('Rate limit — please wait 45 seconds and try again.');
+          throw new Error('RATE_LIMIT');
         throw new Error(`AI service error (${r.status})`);
       }
       const d = await r.json();
@@ -939,11 +939,23 @@ async function generateAI() {
       return extractJSON(content);
     }
 
-    // Try once, if JSON fails retry with lower temperature
-    let spec = await callAI(0.4);
+    // Try once — only retry on JSON failure (not rate limit)
+    let spec;
+    try {
+      spec = await callAI(0.4);
+    } catch (e) {
+      if (e.message === 'RATE_LIMIT') throw new Error('Rate limit — please wait 45 seconds and try again.');
+      throw e;
+    }
     if (!spec) {
-      setProgress(30, 'Retrying with stricter settings...');
-      spec = await callAI(0.2);
+      setProgress(30, 'Fixing AI response, retrying...');
+      await new Promise(ok => setTimeout(ok, 2000));
+      try {
+        spec = await callAI(0.2);
+      } catch (e) {
+        if (e.message === 'RATE_LIMIT') throw new Error('Rate limit — please wait 45 seconds and try again.');
+        throw e;
+      }
     }
     setProgress(45, 'Parsing workbook spec...');
     if (!spec) throw new Error('AI returned invalid JSON — please try again (try a simpler description)');
