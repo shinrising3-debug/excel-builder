@@ -824,58 +824,71 @@ async function generateManual() {
 // ═══════════════════════════════════════════════════════════════════
 const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
 
-const AI_SYSTEM_PROMPT = `You are an expert Excel workbook designer. Respond with ONLY valid JSON (no markdown, no backticks, no explanation).
+const AI_SYSTEM_PROMPT = `You design Excel workbooks. Reply with ONLY valid JSON, no markdown.
 
-Design a professional multi-sheet Excel workbook. Return this exact JSON structure:
+Format: {"workbook_title":"...","sheets":[...]}
 
-{
-  "workbook_title": "Name of the workbook",
-  "sheets": [
-    {
-      "title": "Sheet Name",
-      "type": "data",
-      "columns": "Name (text), Date (date), Amount (currency), Rate (percentage), Status (dropdown: Active|Inactive|Pending), Notes (long), Score (number), Email (email), Phone (phone), Time (time)",
-      "sample_data": "row1val1|row1val2|row1val3\\nrow2val1|row2val2|row2val3",
-      "formulas": [
-        {"column": "Total", "formula": "{Price}*{Quantity}", "type": "currency"}
-      ],
-      "conditional_formatting": [
-        {"column": "Amount", "type": "data_bar"},
-        {"column": "Score", "type": "color_scale"},
-        {"column": "Amount", "type": "highlight", "condition": ">1000", "color": "D1E7DD"}
-      ]
-    },
-    {
-      "title": "Dashboard",
-      "type": "dashboard",
-      "kpis": [
-        {"label": "Total Revenue", "value": "$125,000", "format": "currency"},
-        {"label": "Completion Rate", "value": "87%", "format": "percentage"},
-        {"label": "Total Items", "value": "1,250", "format": "number"}
-      ],
-      "summary_tables": [
-        {
-          "title": "Overview by Category",
-          "headers": ["Category", "Count", "Total"],
-          "rows": [["Marketing", "45", "$12,500"], ["Sales", "32", "$8,200"]]
-        }
-      ]
+Data sheet: {"title":"Name","type":"data","columns":"Col1 (text), Col2 (currency), Status (dropdown: A|B|C)","sample_data":"v1|v2|v3\\nv4|v5|v6","formulas":[{"column":"Total","formula":"{Price}*{Qty}","type":"currency"}],"conditional_formatting":[{"column":"Amount","type":"data_bar"}]}
+
+Dashboard: {"title":"Dashboard","type":"dashboard","kpis":[{"label":"Revenue","value":"$50K","format":"currency"}],"summary_tables":[{"title":"Summary","headers":["Cat","Total"],"rows":[["Sales","$10K"]]}]}
+
+Column types: text,date,number,currency,percentage,dropdown,long,email,phone,time
+Dropdown: Name (dropdown: Opt1|Opt2|Opt3)
+Sample data: 3-5 rows, pipe-separated, newline between rows
+Formulas: {ColumnName} references. CF types: data_bar,color_scale,icon_set,highlight
+Always include a Dashboard sheet last. Keep JSON compact.`;
+
+// Robust JSON extraction — handles backticks, truncation, trailing commas
+function extractJSON(raw) {
+  // Strip markdown fences
+  raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // Try direct parse first
+  try { return JSON.parse(raw); } catch {}
+
+  // Find the outermost { ... } block
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  let substr = raw.slice(start);
+
+  // If JSON is truncated (no closing }), try to close it
+  let opens = 0, closes = 0;
+  for (const ch of substr) { if (ch === '{') opens++; if (ch === '}') closes++; }
+  if (opens > closes) {
+    // Try to close at the last complete sheet object
+    // Find last complete "}" that could end a sheet
+    let lastGoodPos = -1;
+    let depth = 0;
+    for (let i = 0; i < substr.length; i++) {
+      if (substr[i] === '{') depth++;
+      if (substr[i] === '}') { depth--; if (depth === 1) lastGoodPos = i; }
     }
-  ]
-}
+    if (lastGoodPos > 0) {
+      substr = substr.slice(0, lastGoodPos + 1) + ']}';
+    } else {
+      while (opens > closes) { substr += '}'; closes++; }
+      // Close any open arrays
+      const openBrackets = (substr.match(/\[/g) || []).length;
+      const closeBrackets = (substr.match(/\]/g) || []).length;
+      for (let i = closeBrackets; i < openBrackets; i++) substr += ']';
+      substr += '}';
+    }
+  }
 
-RULES:
-- Column types: text, date, number, currency, percentage, dropdown, long, email, phone, time
-- Dropdown syntax: Status (dropdown: Opt1|Opt2|Opt3)
-- Sample data: 3-5 rows, values separated by | (pipe), rows separated by newline
-- Formulas reference other columns using {ColumnName} syntax
-- conditional_formatting types: data_bar, color_scale, icon_set, highlight
-- For highlight: condition is like ">100", "<0", ">=50" and color is hex without #
-- Dashboard KPIs should have realistic summary values
-- summary_tables rows are arrays of string values
-- Create 2-10 sheets depending on complexity — always include a Dashboard sheet
-- Make it professional with realistic sample data and smart formulas
-- Every data sheet should have at least one dropdown and conditional formatting`;
+  // Fix trailing commas (,] or ,})
+  substr = substr.replace(/,\s*([\]}])/g, '$1');
+
+  try { return JSON.parse(substr); } catch {}
+
+  // Last resort: try to fix common issues
+  // Remove any non-JSON text after the last }
+  const lastBrace = substr.lastIndexOf('}');
+  if (lastBrace > 0) substr = substr.slice(0, lastBrace + 1);
+  substr = substr.replace(/,\s*([\]}])/g, '$1');
+  try { return JSON.parse(substr); } catch {}
+
+  return null;
+}
 
 function setProgress(pct, text) {
   const wrap = document.getElementById('progress-ai');
@@ -900,38 +913,40 @@ async function generateAI() {
   setProgress(10, 'Sending to AI...');
 
   try {
-    const resp = await fetch(AI_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'openai-fast',
-        messages: [
-          { role: 'system', content: AI_SYSTEM_PROMPT },
-          { role: 'user', content: desc }
-        ],
-        temperature: 0.7
-      }),
-    });
-
-    setProgress(40, 'AI response received, parsing...');
-
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      if (resp.status === 402 || errBody.includes('FREE_LIMIT')) {
-        throw new Error('Rate limit — please wait 45 seconds and try again.');
+    async function callAI(temp) {
+      const r = await fetch(AI_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai-fast',
+          messages: [
+            { role: 'system', content: AI_SYSTEM_PROMPT },
+            { role: 'user', content: desc }
+          ],
+          temperature: temp,
+          max_tokens: 16000
+        }),
+      });
+      if (!r.ok) {
+        const errBody = await r.text();
+        if (r.status === 402 || errBody.includes('FREE_LIMIT'))
+          throw new Error('Rate limit — please wait 45 seconds and try again.');
+        throw new Error(`AI service error (${r.status})`);
       }
-      throw new Error(`AI service error (${resp.status})`);
+      const d = await r.json();
+      const content = d?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('AI returned empty response');
+      return extractJSON(content);
     }
 
-    const data = await resp.json();
-    let raw = data?.choices?.[0]?.message?.content;
-    if (!raw) throw new Error('AI returned empty response');
-
-    // Strip markdown backticks
-    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-    let spec;
-    try { spec = JSON.parse(raw); } catch { throw new Error('AI returned invalid JSON — please try again'); }
+    // Try once, if JSON fails retry with lower temperature
+    let spec = await callAI(0.4);
+    if (!spec) {
+      setProgress(30, 'Retrying with stricter settings...');
+      spec = await callAI(0.2);
+    }
+    setProgress(45, 'Parsing workbook spec...');
+    if (!spec) throw new Error('AI returned invalid JSON — please try again (try a simpler description)');
 
     // Support both old single-sheet and new multi-sheet format
     let sheets;
