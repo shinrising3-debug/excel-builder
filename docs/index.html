@@ -151,10 +151,33 @@
   .progress-fill { height: 100%; background: var(--gold); border-radius: 3px; transition: width 0.3s; width: 0%; }
   .progress-text { font-size: 12px; color: var(--text-dim); margin-top: 6px; text-align: center; }
 
+  /* Feature toggles */
+  .features-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+  }
+  .feat-toggle {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; user-select: none; transition: border-color 0.2s;
+  }
+  .feat-toggle:hover { border-color: var(--gold); }
+  .feat-toggle input[type="checkbox"] { display: none; }
+  .feat-check {
+    width: 20px; height: 20px; border-radius: 4px; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: all 0.15s; font-size: 13px; color: transparent; background: var(--surface-2);
+  }
+  .feat-toggle input:checked ~ .feat-check {
+    background: var(--gold); border-color: var(--gold); color: var(--navy);
+  }
+  .feat-label { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .feat-desc { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+
   @media (max-width: 600px) {
     .col-row { grid-template-columns: 1fr 110px auto auto; }
     .row-2, .row-3 { grid-template-columns: 1fr; }
     .header h1 { font-size: 22px; }
+    .features-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -199,6 +222,42 @@
       <label>Sample Data <span style="font-weight:400;text-transform:none;">(optional)</span></label>
       <textarea id="m-sample" placeholder="One row per line, values separated by |&#10;e.g. Main Gate | 08:30 AM | John Smith | Fixed"></textarea>
       <div class="sample-hint">Each line = one row. Separate values with <code>|</code> in the same order as your columns.</div>
+    </div>
+
+    <div class="field">
+      <label>Features</label>
+      <div class="features-grid">
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-formulas" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Auto Formulas</div><div class="feat-desc">SUM, profit, margins, GPA, BMI &amp; 40+ patterns</div></div>
+        </label>
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-cf" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Conditional Formatting</div><div class="feat-desc">Data bars, color scales, red/green highlights</div></div>
+        </label>
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-freeze" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Frozen Headers</div><div class="feat-desc">Header row stays visible when scrolling</div></div>
+        </label>
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-filter" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Auto Filters</div><div class="feat-desc">Dropdown filters on every column</div></div>
+        </label>
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-stripe" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Alternating Rows</div><div class="feat-desc">Striped row shading for readability</div></div>
+        </label>
+        <label class="feat-toggle">
+          <input type="checkbox" id="feat-header" checked>
+          <span class="feat-check">✓</span>
+          <div><div class="feat-label">Styled Header</div><div class="feat-desc">Gold bar, title row &amp; navy headers</div></div>
+        </label>
+      </div>
     </div>
 
     <p class="preview-label">Preview</p>
@@ -401,7 +460,10 @@ function parseValue(val, type) {
 }
 
 // Build a single worksheet with full formatting
-function buildSheet(wb, sheetSpec, numRows) {
+function buildSheet(wb, sheetSpec, numRows, feat) {
+  // Default all features ON if not specified (AI mode)
+  if (!feat) feat = { formulas: true, cf: true, freeze: true, filter: true, stripe: true, header: true };
+
   const sheetName = (sheetSpec.title || 'Sheet').substring(0, 31);
   const ws = wb.addWorksheet(sheetName);
   ws.views = [{ showGridLines: false }];
@@ -413,64 +475,82 @@ function buildSheet(wb, sheetSpec, numRows) {
   // Column widths
   allCols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
 
-  // Row 1: Gold bar
-  const r1 = ws.getRow(1);
-  r1.height = 4;
-  for (let i = 1; i <= totalCols; i++) {
-    ws.getCell(1, i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.GOLD) } };
+  let hdrRow;
+
+  if (feat.header) {
+    // Row 1: Gold bar
+    const r1 = ws.getRow(1);
+    r1.height = 4;
+    for (let i = 1; i <= totalCols; i++) {
+      ws.getCell(1, i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.GOLD) } };
+    }
+
+    // Row 2: Title
+    ws.mergeCells(2, 1, 2, totalCols);
+    const titleCell = ws.getCell(2, 1);
+    titleCell.value = (sheetSpec.title || 'Sheet').toUpperCase();
+    titleCell.font = { name: 'Aptos', bold: true, size: 16, color: { argb: argb(P.DARK_BG) } };
+    titleCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    ws.getRow(2).height = 38;
+
+    // Row 3: Subtitle
+    ws.mergeCells(3, 1, 3, totalCols);
+    const now = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dateStr = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2,'0')}, ${now.getFullYear()}`;
+    const subCell = ws.getCell(3, 1);
+    subCell.value = `Generated ${dateStr}  ·  ${numRows} rows pre-formatted`;
+    subCell.font = { name: 'Aptos', size: 10, color: { argb: argb(P.MUTED) } };
+    subCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    ws.getRow(3).height = 22;
+
+    // Row 4: spacer
+    ws.getRow(4).height = 6;
+
+    hdrRow = 5;
+  } else {
+    // No styled header — headers go on row 1
+    hdrRow = 1;
   }
 
-  // Row 2: Title
-  ws.mergeCells(2, 1, 2, totalCols);
-  const titleCell = ws.getCell(2, 1);
-  titleCell.value = (sheetSpec.title || 'Sheet').toUpperCase();
-  titleCell.font = { name: 'Aptos', bold: true, size: 16, color: { argb: argb(P.DARK_BG) } };
-  titleCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
-  ws.getRow(2).height = 38;
-
-  // Row 3: Subtitle
-  ws.mergeCells(3, 1, 3, totalCols);
-  const now = new Date();
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateStr = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2,'0')}, ${now.getFullYear()}`;
-  const subCell = ws.getCell(3, 1);
-  subCell.value = `Generated ${dateStr}  ·  ${numRows} rows pre-formatted`;
-  subCell.font = { name: 'Aptos', size: 10, color: { argb: argb(P.MUTED) } };
-  subCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
-  ws.getRow(3).height = 22;
-
-  // Row 4: spacer
-  ws.getRow(4).height = 6;
-
-  // Row 5: Headers
-  const hdrRow = 5;
+  // Header row
   ws.getRow(hdrRow).height = 30;
   for (let i = 0; i < allCols.length; i++) {
     const cell = ws.getCell(hdrRow, i + 1);
     cell.value = allCols[i].name;
-    cell.font = { name: 'Aptos', bold: true, size: 10, color: { argb: argb(P.WHITE) } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.DARK_BG) } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.border = {
-      left: thinBorder(P.HDR_LINE), right: thinBorder(P.HDR_LINE),
-      top: thinBorder(P.HDR_LINE),
-      bottom: { style: 'medium', color: { argb: argb(P.GOLD) } },
-    };
+    if (feat.header) {
+      cell.font = { name: 'Aptos', bold: true, size: 10, color: { argb: argb(P.WHITE) } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.DARK_BG) } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        left: thinBorder(P.HDR_LINE), right: thinBorder(P.HDR_LINE),
+        top: thinBorder(P.HDR_LINE),
+        bottom: { style: 'medium', color: { argb: argb(P.GOLD) } },
+      };
+    } else {
+      cell.font = { name: 'Aptos', bold: true, size: 10, color: { argb: argb(P.TXT) } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = { bottom: { style: 'thin', color: { argb: argb(P.MID_GRAY) } } };
+    }
   }
 
   // Auto-filter on header row
-  ws.autoFilter = {
-    from: { row: hdrRow, column: 1 },
-    to: { row: hdrRow, column: totalCols }
-  };
+  if (feat.filter) {
+    ws.autoFilter = {
+      from: { row: hdrRow, column: 1 },
+      to: { row: hdrRow, column: totalCols }
+    };
+  }
 
   // Data rows
-  const dataStart = 6;
+  const dataStart = hdrRow + 1;
   const endRow = dataStart + numRows - 1;
 
   for (let row = dataStart; row <= endRow; row++) {
     const isAlt = (row - dataStart) % 2 === 1;
-    const fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? P.OFF_WHITE : P.WHITE) } };
+    const fill = feat.stripe
+      ? { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? P.OFF_WHITE : P.WHITE) } }
+      : { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.WHITE) } };
     ws.getRow(row).height = 28;
 
     // # column
@@ -543,7 +623,7 @@ function buildSheet(wb, sheetSpec, numRows) {
   });
 
   // Conditional formatting on dropdown columns
-  const ddCols = allCols.map((c, i) => ({ col: c, idx: i })).filter(x => x.col.type === 'dropdown' && x.col.options);
+  const ddCols = feat.cf ? allCols.map((c, i) => ({ col: c, idx: i })).filter(x => x.col.type === 'dropdown' && x.col.options) : [];
   if (ddCols.length) {
     const last = ddCols[ddCols.length - 1];
     const cfLetter = getColLetter(last.idx + 1);
@@ -563,7 +643,7 @@ function buildSheet(wb, sheetSpec, numRows) {
   }
 
   // Conditional formatting rules from AI spec
-  if (sheetSpec.conditional_formatting) {
+  if (feat.cf && sheetSpec.conditional_formatting) {
     sheetSpec.conditional_formatting.forEach((rule, ri) => {
       try {
         // Find column index
@@ -619,7 +699,11 @@ function buildSheet(wb, sheetSpec, numRows) {
   }
 
   // Freeze panes
-  ws.views = [{ state: 'frozen', ySplit: dataStart - 1, showGridLines: false }];
+  if (feat.freeze) {
+    ws.views = [{ state: 'frozen', ySplit: dataStart - 1, showGridLines: false }];
+  } else {
+    ws.views = [{ showGridLines: false }];
+  }
 
   // Print setup
   ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
@@ -792,12 +876,24 @@ async function downloadWorkbook(wb, filename) {
 // ═══════════════════════════════════════════════════════════════════
 //  MANUAL MODE
 // ═══════════════════════════════════════════════════════════════════
+function getFeatureToggles() {
+  return {
+    formulas: document.getElementById('feat-formulas')?.checked ?? true,
+    cf: document.getElementById('feat-cf')?.checked ?? true,
+    freeze: document.getElementById('feat-freeze')?.checked ?? true,
+    filter: document.getElementById('feat-filter')?.checked ?? true,
+    stripe: document.getElementById('feat-stripe')?.checked ?? true,
+    header: document.getElementById('feat-header')?.checked ?? true,
+  };
+}
+
 async function generateManual() {
   const status = document.getElementById('status-manual');
   const title = document.getElementById('m-title').value.trim() || 'My Spreadsheet';
   const filename = document.getElementById('m-filename').value.trim() || 'Spreadsheet';
   const numRows = Math.min(2000, Math.max(10, parseInt(document.getElementById('m-rows').value) || 200));
   const sample = document.getElementById('m-sample').value.trim();
+  const feat = getFeatureToggles();
 
   const validCols = columns.filter(c => c.name.trim());
   if (!validCols.length) { showStatus(status, 'error', 'Add at least one column with a name.'); return; }
@@ -808,10 +904,21 @@ async function generateManual() {
     formula: null,
   }));
 
+  // Auto-detect formulas from column names
+  if (feat.formulas) autoDetectFormulas(cols);
+
+  // Auto-detect conditional formatting
+  const cfRules = feat.cf ? autoDetectCF(cols) : [];
+
   showStatus(status, 'loading', 'Building your spreadsheet...');
   try {
     const wb = new ExcelJS.Workbook();
-    buildSheet(wb, { title, parsedCols: cols, sample_data: sample || null }, numRows);
+    buildSheet(wb, {
+      title,
+      parsedCols: cols,
+      sample_data: sample || null,
+      conditional_formatting: cfRules.length ? cfRules : null,
+    }, numRows, feat);
     await downloadWorkbook(wb, filename);
     showStatus(status, 'success', `✅ ${filename}.xlsx downloaded!`);
   } catch (err) {
