@@ -1070,7 +1070,7 @@ async function generateManual() {
 //  AI MODE — Multi-sheet with dashboard
 // ═══════════════════════════════════════════════════════════════════
 const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
-const AI_MODELS = ['openai-large', 'openai', 'openai-fast']; // GPT-4o → GPT-4o-mini → fallback
+const AI_MODELS = ['openai', 'mistral']; // GPT-4o-mini (free, no key) → Mistral 3.1 (free fallback)
 
 const AI_SYSTEM_PROMPT = `You are an Excel workbook designer. Reply with ONLY valid JSON — no markdown, no backticks, no text.
 
