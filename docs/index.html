@@ -1308,6 +1308,9 @@ function autoDetectCF(cols) {
   return rules;
 }
 
+let _lastAICall = 0;
+const AI_COOLDOWN = 50000; // 50 seconds between calls
+
 async function generateAI() {
   const status = document.getElementById('status-ai');
   const btn = document.getElementById('btn-ai-gen');
@@ -1317,28 +1320,50 @@ async function generateAI() {
 
   if (!desc) { showStatus(status, 'error', 'Describe what spreadsheet you want.'); return; }
 
+  // Client-side cooldown to avoid rate limits
+  const elapsed = Date.now() - _lastAICall;
+  if (_lastAICall && elapsed < AI_COOLDOWN) {
+    const wait = Math.ceil((AI_COOLDOWN - elapsed) / 1000);
+    showStatus(status, 'error', `⏳ Please wait ${wait}s before trying again.`);
+    return;
+  }
+
   btn.disabled = true;
   showStatus(status, 'loading', 'AI is designing your workbook...');
   setProgress(10, 'Sending to AI...');
 
   try {
     async function callAI(temp) {
-      const r = await fetch(AI_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'openai-fast',
-          messages: [
-            { role: 'system', content: AI_SYSTEM_PROMPT },
-            { role: 'user', content: desc }
-          ],
-          temperature: temp,
-          max_tokens: 16000
-        }),
-      });
+      _lastAICall = Date.now();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      let r;
+      try {
+        r = await fetch(AI_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: 'openai-fast',
+            messages: [
+              { role: 'system', content: AI_SYSTEM_PROMPT },
+              { role: 'user', content: desc }
+            ],
+            temperature: temp,
+            max_tokens: 16000
+          }),
+        });
+      } catch (fetchErr) {
+        if (fetchErr.name === 'AbortError') throw new Error('AI took too long — try a shorter description.');
+        throw new Error('Network error — check your connection and try again.');
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!r.ok) {
-        const errBody = await r.text();
-        if (r.status === 402 || errBody.includes('FREE_LIMIT'))
+        const errBody = await r.text().catch(() => '');
+        if (r.status === 429 || r.status === 402 || r.status === 503
+            || errBody.includes('FREE_LIMIT') || errBody.includes('rate')
+            || errBody.includes('limit') || errBody.includes('too many'))
           throw new Error('RATE_LIMIT');
         throw new Error(`AI service error (${r.status})`);
       }
@@ -1353,16 +1378,16 @@ async function generateAI() {
     try {
       spec = await callAI(0.4);
     } catch (e) {
-      if (e.message === 'RATE_LIMIT') throw new Error('Rate limit — please wait 45 seconds and try again.');
+      if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 50 seconds and try again.');
       throw e;
     }
     if (!spec) {
       setProgress(30, 'Fixing AI response, retrying...');
-      await new Promise(ok => setTimeout(ok, 2000));
+      await new Promise(ok => setTimeout(ok, 3000));
       try {
         spec = await callAI(0.2);
       } catch (e) {
-        if (e.message === 'RATE_LIMIT') throw new Error('Rate limit — please wait 45 seconds and try again.');
+        if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 50 seconds and try again.');
         throw e;
       }
     }
@@ -1440,13 +1465,29 @@ async function generateAI() {
     setTimeout(() => { document.getElementById('progress-ai').classList.remove('show'); }, 3000);
   } catch (err) {
     document.getElementById('progress-ai').classList.remove('show');
-    if (err.message.includes('Rate limit') || err.message.includes('wait')) {
+    if (err.message.includes('Rate limit') || err.message.includes('wait') || err.message.includes('Wait')) {
       showStatus(status, 'error', '⏳ ' + err.message);
+      // Start a visible countdown
+      let secs = 50;
+      btn.disabled = true;
+      const iv = setInterval(() => {
+        secs--;
+        if (secs <= 0) {
+          clearInterval(iv);
+          btn.disabled = false;
+          btn.textContent = '🤖 Generate with AI';
+          showStatus(status, 'success', '✅ Ready — try again now!');
+        } else {
+          btn.textContent = `⏳ Wait ${secs}s...`;
+        }
+      }, 1000);
+      return; // don't re-enable btn in finally
     } else {
       showStatus(status, 'error', 'Error: ' + err.message);
     }
   } finally {
     btn.disabled = false;
+    btn.textContent = '🤖 Generate with AI';
   }
 }
 
