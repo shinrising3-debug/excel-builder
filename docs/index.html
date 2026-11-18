@@ -1546,30 +1546,42 @@ async function generateAI() {
       return true;
     }
 
-    // Try models in order: openai-large (GPT-4o) → openai (GPT-4o-mini) → openai-fast
+    // Use primary model, only fallback on non-rate-limit errors
     let spec = null;
-    for (let mi = 0; mi < AI_MODELS.length; mi++) {
-      const model = AI_MODELS[mi];
-      setProgress(10 + mi * 10, mi === 0 ? 'Sending to AI...' : `Trying backup model ${mi + 1}...`);
-      try {
-        spec = await callAI(model, 0.4);
-        if (specIsGood(spec)) break; // Good result, stop trying
-        spec = null; // Bad quality, try next model
-      } catch (e) {
-        if (e.message === 'RATE_LIMIT') {
-          // Rate limited on this model — try next one
-          if (mi < AI_MODELS.length - 1) continue;
-          throw new Error('Rate limit hit — wait about 30 seconds and try again.');
-        }
-        if (e.message.startsWith('AI_ERROR_')) {
-          if (mi < AI_MODELS.length - 1) continue; // Try next model
+    let usedModel = AI_MODELS[0]; // openai-large (GPT-4o)
+    try {
+      spec = await callAI(usedModel, 0.4);
+    } catch (e) {
+      if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 30 seconds and try again.');
+      // Model error (not rate limit) — try fallback once
+      if (e.message.startsWith('AI_ERROR_') && AI_MODELS.length > 1) {
+        usedModel = AI_MODELS[1];
+        setProgress(20, 'Primary model unavailable, trying backup...');
+        try {
+          spec = await callAI(usedModel, 0.4);
+        } catch (e2) {
+          if (e2.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 30 seconds and try again.');
           throw new Error('AI service error — please try again.');
         }
+      } else {
         throw e;
       }
     }
+
+    // If JSON parse failed, one retry with lower temperature
+    if (!spec) {
+      setProgress(25, 'Fixing AI response, retrying...');
+      await new Promise(ok => setTimeout(ok, 2000));
+      try {
+        spec = await callAI(usedModel, 0.2);
+      } catch (e) {
+        if (e.message === 'RATE_LIMIT') throw new Error('Rate limit hit — wait about 30 seconds and try again.');
+        throw e;
+      }
+    }
+
     setProgress(40, 'Validating workbook spec...');
-    if (!spec) throw new Error('AI could not generate a valid workbook — try a simpler description.');
+    if (!spec) throw new Error('AI returned invalid JSON — please try again (try a simpler description).');
 
     // Support both old single-sheet and new multi-sheet format
     let sheets;
