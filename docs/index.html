@@ -824,19 +824,15 @@ async function generateManual() {
 // ═══════════════════════════════════════════════════════════════════
 const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
 
-const AI_SYSTEM_PROMPT = `You design Excel workbooks. Reply with ONLY valid JSON, no markdown.
+const AI_SYSTEM_PROMPT = `You design Excel workbooks. Reply ONLY with valid JSON. No markdown, no backticks, no explanation.
 
-Format: {"workbook_title":"...","sheets":[...]}
+{"workbook_title":"...","sheets":[{"title":"...","columns":"...","sample_data":"..."},...,{"title":"Dashboard","type":"dashboard","kpis":[{"label":"...","value":"...","format":"currency|percentage|number"}],"summary_tables":[{"title":"...","headers":["A","B"],"rows":[["x","y"]]}]}]}
 
-Data sheet: {"title":"Name","type":"data","columns":"Col1 (text), Col2 (currency), Status (dropdown: A|B|C)","sample_data":"v1|v2|v3\\nv4|v5|v6","formulas":[{"column":"Total","formula":"{Price}*{Qty}","type":"currency"}],"conditional_formatting":[{"column":"Amount","type":"data_bar"}]}
-
-Dashboard: {"title":"Dashboard","type":"dashboard","kpis":[{"label":"Revenue","value":"$50K","format":"currency"}],"summary_tables":[{"title":"Summary","headers":["Cat","Total"],"rows":[["Sales","$10K"]]}]}
-
-Column types: text,date,number,currency,percentage,dropdown,long,email,phone,time
-Dropdown: Name (dropdown: Opt1|Opt2|Opt3)
-Sample data: 3-5 rows, pipe-separated, newline between rows
-Formulas: {ColumnName} references. CF types: data_bar,color_scale,icon_set,highlight
-Always include a Dashboard sheet last. Keep JSON compact.`;
+Column format: "Name (type), Name2 (type)" — types: text, date, number, currency, percentage, long, email, phone, time, dropdown
+Dropdown: "Status (dropdown: Active|Inactive|Pending)"
+sample_data: pipe-separated values, newline between rows. 3-5 realistic rows.
+Last sheet must be Dashboard with 3-6 KPIs and 1-2 summary tables.
+Keep output compact. No formulas or conditional_formatting needed — the app adds those automatically.`;
 
 // Robust JSON extraction — handles backticks, truncation, trailing commas
 function extractJSON(raw) {
@@ -897,6 +893,105 @@ function setProgress(pct, text) {
   wrap.classList.add('show');
   fill.style.width = pct + '%';
   txt.textContent = text;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AUTO-DETECT: Formulas & Conditional Formatting from column names
+// ═══════════════════════════════════════════════════════════════════
+const FORMULA_PATTERNS = [
+  // {pattern on column name} → {formula referencing other cols}
+  { match: /^(total|sum|amount\s*due)$/i, fn: cols => {
+    // Sum all currency/number cols except this one
+    const nums = cols.filter(c => (c.type === 'currency' || c.type === 'number') && !FORMULA_PATTERNS[0].match.test(c.name));
+    return nums.length >= 2 ? nums.map(c => `{${c.name}}`).join('+') : null;
+  }, type: 'currency' },
+  { match: /^gross\s*profit$/i, fn: cols => {
+    const rev = cols.find(c => /revenue|sales|income/i.test(c.name) && !/net|gross|operat/i.test(c.name));
+    const cost = cols.find(c => /cogs|cost.*(?:good|sold)|cost/i.test(c.name));
+    return rev && cost ? `{${rev.name}}-{${cost.name}}` : null;
+  }, type: 'currency' },
+  { match: /^net\s*(income|profit|pay|earnings)$/i, fn: cols => {
+    const gross = cols.find(c => /gross\s*profit/i.test(c.name));
+    const exp = cols.find(c => /expense|operating|deduction|tax/i.test(c.name));
+    if (gross && exp) return `{${gross.name}}-{${exp.name}}`;
+    const rev = cols.find(c => /revenue|sales|gross\s*pay/i.test(c.name));
+    const ded = cols.find(c => /expense|deduction|cost|tax/i.test(c.name));
+    return rev && ded ? `{${rev.name}}-{${ded.name}}` : null;
+  }, type: 'currency' },
+  { match: /^gross\s*pay$/i, fn: cols => {
+    const hrs = cols.find(c => /hours|hrs/i.test(c.name));
+    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
+    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
+  }, type: 'currency' },
+  { match: /^(weekly|monthly|annual)\s*pay$/i, fn: cols => {
+    const hrs = cols.find(c => /hours|hrs/i.test(c.name));
+    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
+    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
+  }, type: 'currency' },
+  { match: /^variance|diff(erence)?$/i, fn: cols => {
+    const budget = cols.find(c => /budget|planned|target|expected/i.test(c.name));
+    const actual = cols.find(c => /actual|real|spent/i.test(c.name));
+    return budget && actual ? `{${actual.name}}-{${budget.name}}` : null;
+  }, type: 'currency' },
+  { match: /^variance\s*%|diff\s*%$/i, fn: cols => {
+    const budget = cols.find(c => /budget|planned|target/i.test(c.name));
+    const actual = cols.find(c => /actual|real|spent/i.test(c.name));
+    return budget && actual ? `({${actual.name}}-{${budget.name}})/{${budget.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^(profit\s*)?margin|roi|return$/i, fn: cols => {
+    const profit = cols.find(c => /net.*(?:income|profit)|profit/i.test(c.name));
+    const rev = cols.find(c => /revenue|sales|investment|spend/i.test(c.name));
+    return profit && rev ? `{${profit.name}}/{${rev.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^cost\s*per\s*(lead|click|unit|item)$/i, fn: cols => {
+    const spend = cols.find(c => /spend|cost|budget|expense/i.test(c.name) && !/per/i.test(c.name));
+    const count = cols.find(c => /leads?|clicks?|units?|items?|quantity|generated/i.test(c.name));
+    return spend && count ? `{${spend.name}}/{${count.name}}` : null;
+  }, type: 'currency' },
+  { match: /^total\s*(value|cost|price|amount)$/i, fn: cols => {
+    const qty = cols.find(c => /qty|quantity|units?|stock|count|on\s*hand/i.test(c.name));
+    const price = cols.find(c => /price|cost|rate|unit\s*cost/i.test(c.name) && !/total/i.test(c.name));
+    return qty && price ? `{${qty.name}}*{${price.name}}` : null;
+  }, type: 'currency' },
+  { match: /^achievement|completion\s*%?$/i, fn: cols => {
+    const actual = cols.find(c => /actual|current|done/i.test(c.name));
+    const target = cols.find(c => /target|goal|planned/i.test(c.name));
+    return actual && target ? `{${actual.name}}/{${target.name}}` : null;
+  }, type: 'percentage' },
+];
+
+function autoDetectFormulas(cols) {
+  cols.forEach(col => {
+    if (col.formula) return; // Already has one
+    for (const pat of FORMULA_PATTERNS) {
+      if (pat.match.test(col.name)) {
+        const f = pat.fn(cols);
+        if (f) {
+          col.formula = f;
+          if (pat.type) col.type = pat.type;
+          col.width = WIDTH_MAP[col.type] || 18;
+          break;
+        }
+      }
+    }
+  });
+}
+
+function autoDetectCF(cols) {
+  const rules = [];
+  cols.forEach(col => {
+    if (col.type === 'currency' && /revenue|sales|income|profit|total|amount/i.test(col.name)) {
+      rules.push({ column: col.name, type: 'data_bar' });
+    } else if (col.type === 'percentage') {
+      rules.push({ column: col.name, type: 'color_scale' });
+    } else if (col.type === 'number' && /score|rating|rank|point/i.test(col.name)) {
+      rules.push({ column: col.name, type: 'color_scale' });
+    } else if (col.type === 'currency' && /variance|diff/i.test(col.name)) {
+      rules.push({ column: col.name, type: 'highlight', condition: '<0', color: 'F8D7DA' });
+      rules.push({ column: col.name, type: 'highlight', condition: '>0', color: 'D1E7DD' });
+    }
+  });
+  return rules;
 }
 
 async function generateAI() {
@@ -990,10 +1085,9 @@ async function generateAI() {
       // Parse columns
       sheet.parsedCols = parseColumnsFromSpec(sheet.columns || '');
 
-      // Apply formula definitions
+      // Apply formula definitions from AI (if any)
       if (sheet.formulas && Array.isArray(sheet.formulas)) {
         sheet.formulas.forEach(f => {
-          // Add formula column if not in columns list
           let col = sheet.parsedCols.find(c => c.name.toLowerCase() === f.column.toLowerCase());
           if (!col) {
             col = { name: f.column, type: f.type || 'number', width: WIDTH_MAP[f.type] || 18, options: null, formula: null };
@@ -1001,6 +1095,14 @@ async function generateAI() {
           }
           col.formula = f.formula;
         });
+      }
+
+      // AUTO-DETECT formulas based on column names
+      autoDetectFormulas(sheet.parsedCols);
+
+      // AUTO-ADD conditional formatting based on column types
+      if (!sheet.conditional_formatting || !sheet.conditional_formatting.length) {
+        sheet.conditional_formatting = autoDetectCF(sheet.parsedCols);
       }
 
       if (sheet.parsedCols.length) {
