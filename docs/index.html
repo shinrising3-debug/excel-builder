@@ -711,18 +711,28 @@ function buildSheet(wb, sheetSpec, numRows, feat) {
   return { ws, dataStart, endRow, allCols, totalCols };
 }
 
+// KPI card color themes (label row = dark, value row = light tint)
+const KPI_THEMES = {
+  blue:   { label: '1B4F72', value: 'D6EAF8', text: '1B4F72' },
+  green:  { label: '1E8449', value: 'D5F5E3', text: '1E8449' },
+  red:    { label: '922B21', value: 'FADBD8', text: '922B21' },
+  orange: { label: 'BA4A00', value: 'FDEBD0', text: 'BA4A00' },
+  purple: { label: '6C3483', value: 'E8DAEF', text: '6C3483' },
+  navy:   { label: '1B2A4A', value: 'D6DBDF', text: '1B2A4A' },
+  gold:   { label: 'B7950B', value: 'FEF9E7', text: 'B7950B' },
+};
+
 // Build a dashboard summary sheet
 function buildDashboard(wb, dashSpec, otherSheets) {
   const ws = wb.addWorksheet((dashSpec.title || 'Dashboard').substring(0, 31));
   ws.views = [{ showGridLines: false }];
 
-  // Dashboard header
   const headerWidth = 10;
   ws.getColumn(1).width = 3;
   for (let i = 2; i <= headerWidth; i++) ws.getColumn(i).width = 16;
 
   // Row 1: Gold bar
-  ws.getRow(1).height = 4;
+  ws.getRow(1).height = 5;
   for (let i = 1; i <= headerWidth; i++) {
     ws.getCell(1, i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.GOLD) } };
   }
@@ -731,9 +741,9 @@ function buildDashboard(wb, dashSpec, otherSheets) {
   ws.mergeCells(2, 1, 2, headerWidth);
   const titleCell = ws.getCell(2, 1);
   titleCell.value = (dashSpec.title || 'DASHBOARD').toUpperCase();
-  titleCell.font = { name: 'Aptos', bold: true, size: 20, color: { argb: argb(P.DARK_BG) } };
+  titleCell.font = { name: 'Aptos', bold: true, size: 22, color: { argb: argb(P.DARK_BG) } };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.getRow(2).height = 44;
+  ws.getRow(2).height = 50;
 
   // Row 3: Date
   ws.mergeCells(3, 1, 3, headerWidth);
@@ -746,48 +756,61 @@ function buildDashboard(wb, dashSpec, otherSheets) {
   subCell.alignment = { horizontal: 'center', vertical: 'middle' };
   ws.getRow(3).height = 22;
 
-  ws.getRow(4).height = 10;
+  ws.getRow(4).height = 12;
 
-  // KPI cards
+  // KPI section header
   let currentRow = 5;
+  ws.mergeCells(currentRow, 2, currentRow, headerWidth);
+  const kpiHdr = ws.getCell(currentRow, 2);
+  kpiHdr.value = 'KEY PERFORMANCE INDICATORS';
+  kpiHdr.font = { name: 'Aptos', size: 11, bold: true, color: { argb: argb(P.DARK_BG) } };
+  kpiHdr.alignment = { horizontal: 'left', vertical: 'middle' };
+  kpiHdr.border = { bottom: { style: 'medium', color: { argb: argb(P.GOLD) } } };
+  ws.getRow(currentRow).height = 28;
+  currentRow += 2;
+
+  // KPI cards — colored label row + tinted value row (Training Tracker style)
   if (dashSpec.kpis && dashSpec.kpis.length) {
     const kpisPerRow = Math.min(dashSpec.kpis.length, 4);
     const colsPerKpi = Math.floor((headerWidth - 1) / kpisPerRow);
+    const defaultKpiColors = ['blue', 'green', 'orange', 'purple', 'red', 'navy', 'gold', 'blue'];
 
     dashSpec.kpis.forEach((kpi, ki) => {
       const startCol = 2 + (ki % kpisPerRow) * colsPerKpi;
       const endCol = startCol + colsPerKpi - 1;
 
-      if (ki > 0 && ki % kpisPerRow === 0) currentRow += 5;
+      if (ki > 0 && ki % kpisPerRow === 0) currentRow += 4;
 
-      // KPI label
+      const colorKey = kpi.color || defaultKpiColors[ki % defaultKpiColors.length];
+      const theme = KPI_THEMES[colorKey] || KPI_THEMES.blue;
+
+      // Label row — dark background, white text
       ws.mergeCells(currentRow, startCol, currentRow, endCol);
       const labelCell = ws.getCell(currentRow, startCol);
-      labelCell.value = kpi.label || 'Metric';
-      labelCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: argb(P.MUTED) } };
+      labelCell.value = (kpi.label || 'Metric').toUpperCase();
+      labelCell.font = { name: 'Aptos', size: 9, bold: true, color: { argb: argb(P.WHITE) } };
       labelCell.alignment = { horizontal: 'center', vertical: 'middle' };
-      labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.OFF_WHITE) } };
-      labelCell.border = border(P.MID_GRAY);
+      labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(theme.label) } };
+      labelCell.border = border(theme.label);
+      ws.getRow(currentRow).height = 26;
 
-      // KPI value
+      // Value row — tinted background, large colored number
       ws.mergeCells(currentRow + 1, startCol, currentRow + 2, endCol);
       const valCell = ws.getCell(currentRow + 1, startCol);
-      const color = DASH_COLORS[ki % DASH_COLORS.length];
 
       if (kpi.formula) {
         try { valCell.value = { formula: kpi.formula }; } catch { valCell.value = kpi.value || '—'; }
       } else {
         valCell.value = kpi.value || '—';
       }
-      valCell.font = { name: 'Aptos', size: 22, bold: true, color: { argb: argb(color) } };
+      valCell.font = { name: 'Aptos', size: 24, bold: true, color: { argb: argb(theme.text) } };
       valCell.alignment = { horizontal: 'center', vertical: 'middle' };
-      valCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.WHITE) } };
-      valCell.border = border(P.MID_GRAY);
+      valCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(theme.value) } };
+      valCell.border = border(theme.label);
       if (kpi.format === 'currency') valCell.numFmt = '$#,##0.00';
       if (kpi.format === 'percentage') valCell.numFmt = '0.0%';
       if (kpi.format === 'number') valCell.numFmt = '#,##0';
 
-      ws.getRow(currentRow).height = 24;
       ws.getRow(currentRow + 1).height = 22;
       ws.getRow(currentRow + 2).height = 22;
     });
@@ -799,11 +822,11 @@ function buildDashboard(wb, dashSpec, otherSheets) {
   if (dashSpec.summary_tables) {
     dashSpec.summary_tables.forEach((table) => {
       currentRow += 2;
-      // Section title
+      // Section title with gold underline
       ws.mergeCells(currentRow, 2, currentRow, headerWidth);
       const secCell = ws.getCell(currentRow, 2);
-      secCell.value = table.title || 'Summary';
-      secCell.font = { name: 'Aptos', size: 12, bold: true, color: { argb: argb(P.DARK_BG) } };
+      secCell.value = (table.title || 'Summary').toUpperCase();
+      secCell.font = { name: 'Aptos', size: 11, bold: true, color: { argb: argb(P.DARK_BG) } };
       secCell.alignment = { horizontal: 'left', vertical: 'middle' };
       secCell.border = { bottom: { style: 'medium', color: { argb: argb(P.GOLD) } } };
       ws.getRow(currentRow).height = 30;
@@ -826,7 +849,7 @@ function buildDashboard(wb, dashSpec, otherSheets) {
         currentRow++;
       }
 
-      // Table rows
+      // Table data rows
       if (table.rows) {
         table.rows.forEach((rowData, ri) => {
           const vals = Array.isArray(rowData) ? rowData : rowData.split('|').map(v => v.trim());
@@ -853,6 +876,123 @@ function buildDashboard(wb, dashSpec, otherSheets) {
   }
 
   // Print
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  return ws;
+}
+
+// Section color themes for reference sheets (inspired by real workbooks)
+const SECTION_THEMES = {
+  blue:   { header: '1B4F72', headerText: 'FFFFFF', bg: 'D6EAF8', accent: '2E86C1' },
+  green:  { header: '1E8449', headerText: 'FFFFFF', bg: 'D5F5E3', accent: '27AE60' },
+  yellow: { header: 'B7950B', headerText: 'FFFFFF', bg: 'FEF9E7', accent: 'F1C40F' },
+  red:    { header: '922B21', headerText: 'FFFFFF', bg: 'FADBD8', accent: 'E74C3C' },
+  purple: { header: '6C3483', headerText: 'FFFFFF', bg: 'E8DAEF', accent: '8E44AD' },
+  orange: { header: 'BA4A00', headerText: 'FFFFFF', bg: 'FDEBD0', accent: 'E67E22' },
+  navy:   { header: '1B2A4A', headerText: 'FFFFFF', bg: 'D6DBDF', accent: '34495E' },
+};
+
+// Build a reference/info sheet (section-based layout like SOPs, contacts, guides)
+function buildReference(wb, sheetSpec) {
+  const sheetName = (sheetSpec.title || 'Reference').substring(0, 31);
+  const ws = wb.addWorksheet(sheetName);
+  ws.views = [{ showGridLines: false }];
+
+  const totalWidth = 8;
+  ws.getColumn(1).width = 3;
+  ws.getColumn(2).width = 28;
+  ws.getColumn(3).width = 50;
+  for (let i = 4; i <= totalWidth; i++) ws.getColumn(i).width = 16;
+
+  // Row 1: Gold accent bar
+  ws.getRow(1).height = 5;
+  for (let i = 1; i <= totalWidth; i++) {
+    ws.getCell(1, i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(P.GOLD) } };
+  }
+
+  // Row 2: Sheet title
+  ws.mergeCells(2, 1, 2, totalWidth);
+  const titleCell = ws.getCell(2, 1);
+  titleCell.value = (sheetSpec.title || 'Reference').toUpperCase();
+  titleCell.font = { name: 'Aptos', bold: true, size: 18, color: { argb: argb(P.DARK_BG) } };
+  titleCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(2).height = 44;
+
+  // Row 3: Subtitle
+  ws.mergeCells(3, 1, 3, totalWidth);
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateStr = `${months[now.getMonth()]} ${String(now.getDate()).padStart(2,'0')}, ${now.getFullYear()}`;
+  const subCell = ws.getCell(3, 1);
+  subCell.value = `Reference Guide  ·  Updated ${dateStr}`;
+  subCell.font = { name: 'Aptos', size: 10, color: { argb: argb(P.MUTED) } };
+  subCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(3).height = 22;
+
+  let currentRow = 5;
+  const defaultColors = ['blue', 'green', 'yellow', 'purple', 'orange', 'red'];
+
+  const sections = sheetSpec.sections || [];
+  sections.forEach((section, si) => {
+    const colorKey = section.color || defaultColors[si % defaultColors.length];
+    const theme = SECTION_THEMES[colorKey] || SECTION_THEMES.blue;
+
+    // Section header — merged across all columns
+    ws.mergeCells(currentRow, 1, currentRow, totalWidth);
+    const hdrCell = ws.getCell(currentRow, 1);
+    hdrCell.value = '  ' + (section.title || 'Section').toUpperCase();
+    hdrCell.font = { name: 'Aptos', bold: true, size: 12, color: { argb: argb(theme.headerText) } };
+    hdrCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(theme.header) } };
+    hdrCell.alignment = { horizontal: 'left', vertical: 'middle' };
+    hdrCell.border = {
+      bottom: { style: 'medium', color: { argb: argb(theme.accent) } },
+    };
+    ws.getRow(currentRow).height = 32;
+    currentRow++;
+
+    // Section rows — key-value pairs with tinted background
+    const rows = section.rows || [];
+    rows.forEach((rowData, ri) => {
+      const vals = Array.isArray(rowData) ? rowData : [rowData];
+      const isAlt = ri % 2 === 0;
+
+      // Label cell (column 2)
+      ws.getCell(currentRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? theme.bg : P.WHITE) } };
+      ws.getCell(currentRow, 1).border = border();
+
+      if (vals.length >= 2) {
+        // Key-value layout
+        ws.getCell(currentRow, 2).value = vals[0];
+        ws.getCell(currentRow, 2).font = { name: 'Aptos', size: 10, bold: true, color: { argb: argb(theme.header) } };
+        ws.getCell(currentRow, 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? theme.bg : P.WHITE) } };
+        ws.getCell(currentRow, 2).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+        ws.getCell(currentRow, 2).border = border();
+
+        // Value — merge across remaining columns
+        ws.mergeCells(currentRow, 3, currentRow, totalWidth);
+        ws.getCell(currentRow, 3).value = vals[1];
+        ws.getCell(currentRow, 3).font = { name: 'Aptos', size: 10, color: { argb: argb(P.TXT) } };
+        ws.getCell(currentRow, 3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? theme.bg : P.WHITE) } };
+        ws.getCell(currentRow, 3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
+        ws.getCell(currentRow, 3).border = border();
+      } else {
+        // Single value spanning all
+        ws.mergeCells(currentRow, 2, currentRow, totalWidth);
+        ws.getCell(currentRow, 2).value = vals[0];
+        ws.getCell(currentRow, 2).font = { name: 'Aptos', size: 10, color: { argb: argb(P.TXT) } };
+        ws.getCell(currentRow, 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(isAlt ? theme.bg : P.WHITE) } };
+        ws.getCell(currentRow, 2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
+        ws.getCell(currentRow, 2).border = border();
+      }
+
+      ws.getRow(currentRow).height = 28;
+      currentRow++;
+    });
+
+    currentRow += 1; // Gap between sections
+  });
+
+  // Freeze top rows
+  ws.views = [{ state: 'frozen', ySplit: 3, showGridLines: false }];
   ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   return ws;
 }
@@ -931,17 +1071,34 @@ async function generateManual() {
 // ═══════════════════════════════════════════════════════════════════
 const AI_API_URL = 'https://text.pollinations.ai/openai/v1/chat/completions';
 
-const AI_SYSTEM_PROMPT = `You design Excel workbooks. Reply ONLY with valid JSON. No markdown, no backticks, no explanation.
+const AI_SYSTEM_PROMPT = `You design professional Excel workbooks. Reply ONLY with valid JSON. No markdown, no backticks, no explanation.
 
-{"workbook_title":"...","sheets":[{"title":"...","columns":"...","sample_data":"..."},...,{"title":"Dashboard","type":"dashboard","kpis":[{"label":"...","value":"...","format":"currency|percentage|number"}],"summary_tables":[{"title":"...","headers":["A","B"],"rows":[["x","y"]]}]}]}
+SHEET TYPES:
+1. "data" — standard table (employees, inventory, transactions). Use columns + sample_data.
+2. "tracker" — compliance/status tracking with status columns and color-coded rows. Use columns + sample_data. Add a "Status" dropdown column. Great for training, tasks, audits, tickets, onboarding checklists.
+3. "reference" — section-based info/guide sheet (SOPs, procedures, contacts, site info, quick-ref guides). Uses "sections" array instead of columns. Each section: {"title":"...","color":"blue|green|yellow|red|purple|orange","rows":[["Label","Value"],...]}.
+4. "dashboard" — KPI summary. Uses kpis + summary_tables. MUST be last sheet.
 
-Column format: "Name (type), Name2 (type)" — types: text, date, number, currency, percentage, long, email, phone, time, dropdown
+FORMAT:
+{"workbook_title":"...","sheets":[
+  {"title":"...","type":"data","columns":"...","sample_data":"..."},
+  {"title":"...","type":"tracker","columns":"...","sample_data":"..."},
+  {"title":"...","type":"reference","sections":[{"title":"...","color":"blue","rows":[["Key","Value"]]}]},
+  {"title":"Dashboard","type":"dashboard","kpis":[{"label":"...","value":"...","format":"currency|percentage|number","color":"blue|green|red|orange|purple"}],"summary_tables":[{"title":"...","headers":["A","B"],"rows":[["x","y"]]}]}
+]}
+
+Column format: "Name (type)" — types: text, date, number, currency, percentage, long, email, phone, time, dropdown
 Dropdown: "Status (dropdown: Active|Inactive|Pending)"
 sample_data: pipe-separated values, newline between rows. 3-5 realistic rows.
-Last sheet must be Dashboard with 3-6 KPIs and 1-2 summary tables.
-Keep output compact. No formulas or conditional_formatting needed — the app adds those automatically.
-Works for ANY domain: business, restaurant, school, HR, inventory, fitness, real estate, project management, sports, medical, etc.
-Use clear column names like "Food Cost", "Menu Price", "Hours Worked", "Hourly Rate", "Quantity", "Unit Price" so the app auto-detects formulas.`;
+
+RULES:
+- Use 3-10 sheets. More sheets = more professional. Mix sheet types.
+- Tracker sheets MUST have a Status dropdown and a Date column.
+- Reference sheets: 2-6 sections each with 3-8 rows of key-value info. Use different colors per section.
+- Dashboard: 4-8 KPIs with mixed colors, 1-3 summary tables.
+- Use clear column names like "Hours Worked", "Unit Price", "Completion %" — the app auto-detects formulas.
+- Works for ANY domain: business, restaurant, school, HR, inventory, fitness, real estate, security, medical, construction, sports, etc.
+- Keep output compact. No formulas needed — the app adds those automatically.`;
 
 // Robust JSON extraction — handles backticks, truncation, trailing commas
 function extractJSON(raw) {
@@ -1412,16 +1569,28 @@ async function generateAI() {
     wb.created = new Date();
 
     let sheetCount = 0;
-    // Build data sheets first, then dashboards
-    const dataSheets = sheets.filter(s => s.type !== 'dashboard');
+    // Sort: data/tracker first, reference next, dashboards last
+    const dataSheets = sheets.filter(s => s.type === 'data' || s.type === 'tracker' || (!s.type && s.columns));
+    const refSheets = sheets.filter(s => s.type === 'reference');
     const dashSheets = sheets.filter(s => s.type === 'dashboard');
+    const orderedSheets = [...dataSheets, ...refSheets, ...dashSheets];
 
-    for (const sheet of dataSheets) {
+    for (const sheet of orderedSheets) {
       sheetCount++;
-      const pct = 50 + Math.round((sheetCount / sheets.length) * 40);
-      setProgress(pct, `Building sheet ${sheetCount}/${sheets.length}: ${sheet.title}...`);
+      const pct = 50 + Math.round((sheetCount / orderedSheets.length) * 40);
+      setProgress(pct, `Building sheet ${sheetCount}/${orderedSheets.length}: ${sheet.title}...`);
 
-      // Parse columns
+      if (sheet.type === 'dashboard') {
+        buildDashboard(wb, sheet, dataSheets);
+        continue;
+      }
+
+      if (sheet.type === 'reference') {
+        buildReference(wb, sheet);
+        continue;
+      }
+
+      // Data or tracker sheet
       sheet.parsedCols = parseColumnsFromSpec(sheet.columns || '');
 
       // Apply formula definitions from AI (if any)
@@ -1447,12 +1616,6 @@ async function generateAI() {
       if (sheet.parsedCols.length) {
         buildSheet(wb, sheet, numRows);
       }
-    }
-
-    for (const dash of dashSheets) {
-      sheetCount++;
-      setProgress(90, `Building dashboard...`);
-      buildDashboard(wb, dash, dataSheets);
     }
 
     setProgress(95, 'Generating file...');
