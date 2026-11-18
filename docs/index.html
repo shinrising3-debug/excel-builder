@@ -832,7 +832,9 @@ Column format: "Name (type), Name2 (type)" — types: text, date, number, curren
 Dropdown: "Status (dropdown: Active|Inactive|Pending)"
 sample_data: pipe-separated values, newline between rows. 3-5 realistic rows.
 Last sheet must be Dashboard with 3-6 KPIs and 1-2 summary tables.
-Keep output compact. No formulas or conditional_formatting needed — the app adds those automatically.`;
+Keep output compact. No formulas or conditional_formatting needed — the app adds those automatically.
+Works for ANY domain: business, restaurant, school, HR, inventory, fitness, real estate, project management, sports, medical, etc.
+Use clear column names like "Food Cost", "Menu Price", "Hours Worked", "Hourly Rate", "Quantity", "Unit Price" so the app auto-detects formulas.`;
 
 // Robust JSON extraction — handles backticks, truncation, trailing commas
 function extractJSON(raw) {
@@ -899,18 +901,23 @@ function setProgress(pct, text) {
 //  AUTO-DETECT: Formulas & Conditional Formatting from column names
 // ═══════════════════════════════════════════════════════════════════
 const FORMULA_PATTERNS = [
-  // {pattern on column name} → {formula referencing other cols}
-  { match: /^(total|sum|amount\s*due)$/i, fn: cols => {
-    // Sum all currency/number cols except this one
-    const nums = cols.filter(c => (c.type === 'currency' || c.type === 'number') && !FORMULA_PATTERNS[0].match.test(c.name));
+  // ── GENERIC MATH ──────────────────────────────────────────────
+  { match: /^(total|sum|amount\s*due|grand\s*total|subtotal|balance\s*due)$/i, fn: cols => {
+    const nums = cols.filter(c => (c.type === 'currency' || c.type === 'number') && !/^(total|sum|amount|grand|subtotal|balance)/i.test(c.name));
     return nums.length >= 2 ? nums.map(c => `{${c.name}}`).join('+') : null;
   }, type: 'currency' },
+  { match: /^average|mean|avg$/i, fn: cols => {
+    const nums = cols.filter(c => (c.type === 'currency' || c.type === 'number') && !/average|mean|avg/i.test(c.name));
+    return nums.length >= 2 ? `(${nums.map(c => `{${c.name}}`).join('+')})/` + nums.length : null;
+  }, type: 'number' },
+
+  // ── FINANCE / ACCOUNTING ──────────────────────────────────────
   { match: /^gross\s*profit$/i, fn: cols => {
     const rev = cols.find(c => /revenue|sales|income/i.test(c.name) && !/net|gross|operat/i.test(c.name));
     const cost = cols.find(c => /cogs|cost.*(?:good|sold)|cost/i.test(c.name));
     return rev && cost ? `{${rev.name}}-{${cost.name}}` : null;
   }, type: 'currency' },
-  { match: /^net\s*(income|profit|pay|earnings)$/i, fn: cols => {
+  { match: /^net\s*(income|profit|pay|earnings|revenue)$/i, fn: cols => {
     const gross = cols.find(c => /gross\s*profit/i.test(c.name));
     const exp = cols.find(c => /expense|operating|deduction|tax/i.test(c.name));
     if (gross && exp) return `{${gross.name}}-{${exp.name}}`;
@@ -918,46 +925,234 @@ const FORMULA_PATTERNS = [
     const ded = cols.find(c => /expense|deduction|cost|tax/i.test(c.name));
     return rev && ded ? `{${rev.name}}-{${ded.name}}` : null;
   }, type: 'currency' },
-  { match: /^gross\s*pay$/i, fn: cols => {
-    const hrs = cols.find(c => /hours|hrs/i.test(c.name));
-    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
-    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
-  }, type: 'currency' },
-  { match: /^(weekly|monthly|annual)\s*pay$/i, fn: cols => {
-    const hrs = cols.find(c => /hours|hrs/i.test(c.name));
-    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
-    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
-  }, type: 'currency' },
-  { match: /^variance|diff(erence)?$/i, fn: cols => {
-    const budget = cols.find(c => /budget|planned|target|expected/i.test(c.name));
-    const actual = cols.find(c => /actual|real|spent/i.test(c.name));
-    return budget && actual ? `{${actual.name}}-{${budget.name}}` : null;
-  }, type: 'currency' },
-  { match: /^variance\s*%|diff\s*%$/i, fn: cols => {
-    const budget = cols.find(c => /budget|planned|target/i.test(c.name));
-    const actual = cols.find(c => /actual|real|spent/i.test(c.name));
-    return budget && actual ? `({${actual.name}}-{${budget.name}})/{${budget.name}}` : null;
-  }, type: 'percentage' },
-  { match: /^(profit\s*)?margin|roi|return$/i, fn: cols => {
+  { match: /^(profit\s*)?margin|roi|return\s*%?$/i, fn: cols => {
     const profit = cols.find(c => /net.*(?:income|profit)|profit/i.test(c.name));
     const rev = cols.find(c => /revenue|sales|investment|spend/i.test(c.name));
     return profit && rev ? `{${profit.name}}/{${rev.name}}` : null;
   }, type: 'percentage' },
-  { match: /^cost\s*per\s*(lead|click|unit|item)$/i, fn: cols => {
+  { match: /^variance|diff(erence)?$/i, fn: cols => {
+    const budget = cols.find(c => /budget|planned|target|expected|forecast/i.test(c.name));
+    const actual = cols.find(c => /actual|real|spent|result/i.test(c.name));
+    return budget && actual ? `{${actual.name}}-{${budget.name}}` : null;
+  }, type: 'currency' },
+  { match: /^variance\s*%|diff\s*%$/i, fn: cols => {
+    const budget = cols.find(c => /budget|planned|target|forecast/i.test(c.name));
+    const actual = cols.find(c => /actual|real|spent|result/i.test(c.name));
+    return budget && actual ? `({${actual.name}}-{${budget.name}})/{${budget.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^cost\s*per\s*(lead|click|unit|item|acquisition|customer|order|impression)$/i, fn: cols => {
     const spend = cols.find(c => /spend|cost|budget|expense/i.test(c.name) && !/per/i.test(c.name));
-    const count = cols.find(c => /leads?|clicks?|units?|items?|quantity|generated/i.test(c.name));
+    const count = cols.find(c => /leads?|clicks?|units?|items?|quantity|generated|customers?|orders?|impressions?/i.test(c.name));
     return spend && count ? `{${spend.name}}/{${count.name}}` : null;
   }, type: 'currency' },
-  { match: /^total\s*(value|cost|price|amount)$/i, fn: cols => {
-    const qty = cols.find(c => /qty|quantity|units?|stock|count|on\s*hand/i.test(c.name));
-    const price = cols.find(c => /price|cost|rate|unit\s*cost/i.test(c.name) && !/total/i.test(c.name));
+  { match: /^total\s*(value|cost|price|amount|revenue)$/i, fn: cols => {
+    const qty = cols.find(c => /qty|quantity|units?|stock|count|on\s*hand|sold|volume/i.test(c.name));
+    const price = cols.find(c => /price|cost|rate|unit\s*cost|unit\s*price/i.test(c.name) && !/total/i.test(c.name));
     return qty && price ? `{${qty.name}}*{${price.name}}` : null;
   }, type: 'currency' },
-  { match: /^achievement|completion\s*%?$/i, fn: cols => {
-    const actual = cols.find(c => /actual|current|done/i.test(c.name));
-    const target = cols.find(c => /target|goal|planned/i.test(c.name));
+
+  // ── HR / PAYROLL ──────────────────────────────────────────────
+  { match: /^gross\s*pay$/i, fn: cols => {
+    const hrs = cols.find(c => /hours|hrs|hours\s*worked/i.test(c.name));
+    const rate = cols.find(c => /rate|hourly|wage|pay\s*rate/i.test(c.name));
+    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
+  }, type: 'currency' },
+  { match: /^(weekly|monthly|annual|bi-?weekly)\s*pay$/i, fn: cols => {
+    const hrs = cols.find(c => /hours|hrs/i.test(c.name));
+    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
+    return hrs && rate ? `{${hrs.name}}*{${rate.name}}` : null;
+  }, type: 'currency' },
+  { match: /^net\s*pay$/i, fn: cols => {
+    const gross = cols.find(c => /gross\s*pay/i.test(c.name));
+    const ded = cols.find(c => /deduction|tax|withholding/i.test(c.name));
+    return gross && ded ? `{${gross.name}}-{${ded.name}}` : null;
+  }, type: 'currency' },
+  { match: /^overtime\s*(pay|amount)?$/i, fn: cols => {
+    const otHrs = cols.find(c => /overtime.*hr|ot.*hr|extra.*hr/i.test(c.name));
+    const rate = cols.find(c => /rate|hourly|wage/i.test(c.name));
+    return otHrs && rate ? `{${otHrs.name}}*{${rate.name}}*1.5` : null;
+  }, type: 'currency' },
+  { match: /^leave\s*balance|remaining\s*(leave|pto|days)$/i, fn: cols => {
+    const alloc = cols.find(c => /allocated|entitled|total\s*(leave|pto|days)|allowance/i.test(c.name));
+    const used = cols.find(c => /used|taken|consumed/i.test(c.name));
+    return alloc && used ? `{${alloc.name}}-{${used.name}}` : null;
+  }, type: 'number' },
+  { match: /^years?\s*of\s*service|tenure$/i, fn: cols => {
+    const start = cols.find(c => /start\s*date|hire\s*date|join\s*date|date\s*hired/i.test(c.name));
+    return start ? `(TODAY()-{${start.name}})/365` : null;
+  }, type: 'number' },
+
+  // ── RESTAURANT / FOOD ─────────────────────────────────────────
+  { match: /^food\s*cost\s*%|cost\s*%$/i, fn: cols => {
+    const cost = cols.find(c => /ingredient.*cost|food\s*cost|cost|cogs/i.test(c.name) && !/percent|%/i.test(c.name));
+    const price = cols.find(c => /menu\s*price|selling\s*price|price/i.test(c.name));
+    return cost && price ? `{${cost.name}}/{${price.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^(menu\s*)?markup|markup\s*%$/i, fn: cols => {
+    const cost = cols.find(c => /ingredient.*cost|food\s*cost|cost/i.test(c.name) && !/percent|%/i.test(c.name));
+    const price = cols.find(c => /menu\s*price|selling\s*price|price/i.test(c.name));
+    return cost && price ? `({${price.name}}-{${cost.name}})/{${cost.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^tip\s*(amount)?$/i, fn: cols => {
+    const bill = cols.find(c => /bill|check|subtotal|total|amount/i.test(c.name) && !/tip/i.test(c.name));
+    const pct = cols.find(c => /tip\s*%|tip\s*rate|gratuity\s*%/i.test(c.name));
+    return bill && pct ? `{${bill.name}}*{${pct.name}}` : null;
+  }, type: 'currency' },
+  { match: /^total\s*(bill|check|with\s*tip)$/i, fn: cols => {
+    const sub = cols.find(c => /subtotal|bill|check|amount/i.test(c.name) && !/total|tip/i.test(c.name));
+    const tip = cols.find(c => /^tip\b/i.test(c.name));
+    return sub && tip ? `{${sub.name}}+{${tip.name}}` : null;
+  }, type: 'currency' },
+  { match: /^per\s*person|split$/i, fn: cols => {
+    const total = cols.find(c => /total.*bill|total.*check|grand\s*total/i.test(c.name));
+    const ppl = cols.find(c => /guests?|people|party\s*size|diners?|headcount/i.test(c.name));
+    return total && ppl ? `{${total.name}}/{${ppl.name}}` : null;
+  }, type: 'currency' },
+
+  // ── EDUCATION / GRADING ───────────────────────────────────────
+  { match: /^(total\s*)?score|total\s*marks|final\s*score$/i, fn: cols => {
+    const scores = cols.filter(c => c.type === 'number' && /exam|test|quiz|midterm|final|assignment|hw|homework|lab|project|marks?/i.test(c.name) && !/total|gpa|average|grade|percent/i.test(c.name));
+    return scores.length >= 2 ? scores.map(c => `{${c.name}}`).join('+') : null;
+  }, type: 'number' },
+  { match: /^(overall\s*)?percentage|percent\s*score$/i, fn: cols => {
+    const score = cols.find(c => /total.*score|total.*marks|final\s*score/i.test(c.name));
+    const max = cols.find(c => /max.*marks|max.*score|total.*possible|out\s*of/i.test(c.name));
+    return score && max ? `{${score.name}}/{${max.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^gpa$/i, fn: cols => {
+    const grade = cols.find(c => /grade\s*point|quality\s*point/i.test(c.name));
+    const credits = cols.find(c => /credits?|credit\s*hours?|units?/i.test(c.name));
+    return grade && credits ? `{${grade.name}}/{${credits.name}}` : null;
+  }, type: 'number' },
+  { match: /^attendance\s*%|attendance\s*rate$/i, fn: cols => {
+    const present = cols.find(c => /present|attended|days\s*present/i.test(c.name));
+    const total = cols.find(c => /total\s*days|total\s*classes|working\s*days|school\s*days/i.test(c.name));
+    return present && total ? `{${present.name}}/{${total.name}}` : null;
+  }, type: 'percentage' },
+  { match: /^absent\s*days|absences$/i, fn: cols => {
+    const total = cols.find(c => /total\s*days|total\s*classes|working\s*days/i.test(c.name));
+    const present = cols.find(c => /present|attended|days\s*present/i.test(c.name));
+    return total && present ? `{${total.name}}-{${present.name}}` : null;
+  }, type: 'number' },
+
+  // ── INVENTORY / WAREHOUSE ─────────────────────────────────────
+  { match: /^reorder\s*(qty|quantity|point)?$/i, fn: cols => {
+    const daily = cols.find(c => /daily.*usage|daily.*demand|avg.*usage|consumption/i.test(c.name));
+    const lead = cols.find(c => /lead\s*time|restock.*days?|delivery.*days?/i.test(c.name));
+    return daily && lead ? `{${daily.name}}*{${lead.name}}` : null;
+  }, type: 'number' },
+  { match: /^days?\s*of\s*supply|stock\s*days$/i, fn: cols => {
+    const stock = cols.find(c => /stock|on\s*hand|qty|quantity|inventory/i.test(c.name) && !/reorder|min|max|safety/i.test(c.name));
+    const daily = cols.find(c => /daily.*usage|daily.*demand|avg.*usage|consumption|daily.*sales/i.test(c.name));
+    return stock && daily ? `{${stock.name}}/{${daily.name}}` : null;
+  }, type: 'number' },
+  { match: /^stock\s*value|inventory\s*value$/i, fn: cols => {
+    const qty = cols.find(c => /stock|on\s*hand|qty|quantity/i.test(c.name) && !/reorder|value/i.test(c.name));
+    const cost = cols.find(c => /unit\s*cost|cost|price/i.test(c.name) && !/total|stock|inventory/i.test(c.name));
+    return qty && cost ? `{${qty.name}}*{${cost.name}}` : null;
+  }, type: 'currency' },
+  { match: /^(stock\s*)?(shortage|deficit)|needs?\s*to\s*order$/i, fn: cols => {
+    const min = cols.find(c => /min.*stock|min.*qty|safety\s*stock|reorder\s*point/i.test(c.name));
+    const current = cols.find(c => /current.*stock|on\s*hand|qty|quantity|stock/i.test(c.name) && !/min|max|safety|reorder|value/i.test(c.name));
+    return min && current ? `MAX(0,{${min.name}}-{${current.name}})` : null;
+  }, type: 'number' },
+  { match: /^turnover\s*(rate|ratio)?$/i, fn: cols => {
+    const sold = cols.find(c => /sold|cogs|cost.*sold|usage/i.test(c.name));
+    const avg = cols.find(c => /avg.*inventory|average.*stock|inventory/i.test(c.name));
+    return sold && avg ? `{${sold.name}}/{${avg.name}}` : null;
+  }, type: 'number' },
+
+  // ── PROJECT MANAGEMENT ────────────────────────────────────────
+  { match: /^(days?\s*)?(remaining|left|overdue)$/i, fn: cols => {
+    const due = cols.find(c => /due.*date|deadline|end\s*date|target.*date/i.test(c.name));
+    return due ? `{${due.name}}-TODAY()` : null;
+  }, type: 'number' },
+  { match: /^duration|elapsed\s*days?$/i, fn: cols => {
+    const start = cols.find(c => /start\s*date|begin\s*date|created/i.test(c.name));
+    const end = cols.find(c => /end\s*date|finish\s*date|completed?\s*date/i.test(c.name));
+    return start && end ? `{${end.name}}-{${start.name}}` : null;
+  }, type: 'number' },
+  { match: /^achievement|completion\s*%?|progress\s*%?|%\s*complete$/i, fn: cols => {
+    const actual = cols.find(c => /actual|current|done|completed|finished/i.test(c.name));
+    const target = cols.find(c => /target|goal|planned|total|required/i.test(c.name));
     return actual && target ? `{${actual.name}}/{${target.name}}` : null;
   }, type: 'percentage' },
+  { match: /^budget\s*remaining|remaining\s*budget$/i, fn: cols => {
+    const budget = cols.find(c => /^budget$|total\s*budget|allocated/i.test(c.name));
+    const spent = cols.find(c => /spent|actual|used|consumed/i.test(c.name));
+    return budget && spent ? `{${budget.name}}-{${spent.name}}` : null;
+  }, type: 'currency' },
+
+  // ── REAL ESTATE / PROPERTY ────────────────────────────────────
+  { match: /^price\s*per\s*(sqft|sq\s*ft|square\s*foot|sq\s*m)$/i, fn: cols => {
+    const price = cols.find(c => /price|value|listing/i.test(c.name) && !/per/i.test(c.name));
+    const area = cols.find(c => /sqft|sq\s*ft|area|size|square/i.test(c.name));
+    return price && area ? `{${price.name}}/{${area.name}}` : null;
+  }, type: 'currency' },
+  { match: /^monthly\s*(payment|mortgage|emi)$/i, fn: cols => {
+    const price = cols.find(c => /price|loan|principal|amount/i.test(c.name));
+    const rate = cols.find(c => /rate|interest|apr/i.test(c.name));
+    return price && rate ? `{${price.name}}*{${rate.name}}/12` : null;
+  }, type: 'currency' },
+  { match: /^(annual\s*)?rental\s*yield|cap\s*rate$/i, fn: cols => {
+    const rent = cols.find(c => /annual.*rent|yearly.*rent|rent/i.test(c.name));
+    const price = cols.find(c => /price|value|purchase/i.test(c.name) && !/rent/i.test(c.name));
+    return rent && price ? `{${rent.name}}/{${price.name}}` : null;
+  }, type: 'percentage' },
+
+  // ── FITNESS / HEALTH ──────────────────────────────────────────
+  { match: /^bmi$/i, fn: cols => {
+    const weight = cols.find(c => /weight|mass/i.test(c.name) && !/bmi/i.test(c.name));
+    const height = cols.find(c => /height|stature/i.test(c.name));
+    return weight && height ? `{${weight.name}}/({${height.name}}*{${height.name}})` : null;
+  }, type: 'number' },
+  { match: /^pace|min\s*per\s*(km|mi|mile)$/i, fn: cols => {
+    const time = cols.find(c => /time|duration|minutes/i.test(c.name));
+    const dist = cols.find(c => /distance|km|miles?/i.test(c.name));
+    return time && dist ? `{${time.name}}/{${dist.name}}` : null;
+  }, type: 'number' },
+  { match: /^calories\s*burned|energy\s*expenditure$/i, fn: cols => {
+    const dur = cols.find(c => /duration|minutes|time/i.test(c.name));
+    const rate = cols.find(c => /cal.*per.*min|burn\s*rate|met/i.test(c.name));
+    return dur && rate ? `{${dur.name}}*{${rate.name}}` : null;
+  }, type: 'number' },
+  { match: /^total\s*(weight|volume|load)$/i, fn: cols => {
+    const sets = cols.find(c => /sets?/i.test(c.name));
+    const reps = cols.find(c => /reps?|repetitions?/i.test(c.name));
+    const wt = cols.find(c => /weight|load/i.test(c.name) && !/total/i.test(c.name));
+    return sets && reps && wt ? `{${sets.name}}*{${reps.name}}*{${wt.name}}` : null;
+  }, type: 'number' },
+
+  // ── E-COMMERCE / SALES ────────────────────────────────────────
+  { match: /^discount\s*(amount)?$/i, fn: cols => {
+    const price = cols.find(c => /original.*price|list.*price|mrp|price/i.test(c.name) && !/discount|sale|final/i.test(c.name));
+    const pct = cols.find(c => /discount\s*%|discount\s*rate/i.test(c.name));
+    return price && pct ? `{${price.name}}*{${pct.name}}` : null;
+  }, type: 'currency' },
+  { match: /^(sale|final|net)\s*price$/i, fn: cols => {
+    const price = cols.find(c => /original.*price|list.*price|mrp|price/i.test(c.name) && !/discount|sale|final|net/i.test(c.name));
+    const disc = cols.find(c => /discount\s*amount|discount$/i.test(c.name) && !/rate|%/i.test(c.name));
+    return price && disc ? `{${price.name}}-{${disc.name}}` : null;
+  }, type: 'currency' },
+  { match: /^tax\s*(amount)?$/i, fn: cols => {
+    const sub = cols.find(c => /subtotal|amount|price|total/i.test(c.name) && !/tax|grand/i.test(c.name));
+    const rate = cols.find(c => /tax\s*rate|tax\s*%|gst|vat/i.test(c.name));
+    return sub && rate ? `{${sub.name}}*{${rate.name}}` : null;
+  }, type: 'currency' },
+  { match: /^conversion\s*rate$/i, fn: cols => {
+    const conv = cols.find(c => /conversions?|purchases?|orders?|sign\s*ups?/i.test(c.name));
+    const visits = cols.find(c => /visitors?|visits?|sessions?|traffic|clicks?/i.test(c.name));
+    return conv && visits ? `{${conv.name}}/{${visits.name}}` : null;
+  }, type: 'percentage' },
+
+  // ── GENERIC RATIOS / CATCH-ALL ────────────────────────────────
+  { match: /^(.+)\s*per\s*(.+)$/i, fn: (cols, name) => {
+    const m = name.match(/^(.+)\s+per\s+(.+)$/i);
+    if (!m) return null;
+    const num = cols.find(c => new RegExp(m[1].trim(), 'i').test(c.name) && c.name !== name);
+    const den = cols.find(c => new RegExp(m[2].trim(), 'i').test(c.name) && c.name !== name);
+    return num && den ? `{${num.name}}/{${den.name}}` : null;
+  }, type: 'number' },
 ];
 
 function autoDetectFormulas(cols) {
@@ -965,7 +1160,7 @@ function autoDetectFormulas(cols) {
     if (col.formula) return; // Already has one
     for (const pat of FORMULA_PATTERNS) {
       if (pat.match.test(col.name)) {
-        const f = pat.fn(cols);
+        const f = pat.fn(cols, col.name);
         if (f) {
           col.formula = f;
           if (pat.type) col.type = pat.type;
@@ -980,15 +1175,27 @@ function autoDetectFormulas(cols) {
 function autoDetectCF(cols) {
   const rules = [];
   cols.forEach(col => {
-    if (col.type === 'currency' && /revenue|sales|income|profit|total|amount/i.test(col.name)) {
-      rules.push({ column: col.name, type: 'data_bar' });
-    } else if (col.type === 'percentage') {
-      rules.push({ column: col.name, type: 'color_scale' });
-    } else if (col.type === 'number' && /score|rating|rank|point/i.test(col.name)) {
-      rules.push({ column: col.name, type: 'color_scale' });
-    } else if (col.type === 'currency' && /variance|diff/i.test(col.name)) {
-      rules.push({ column: col.name, type: 'highlight', condition: '<0', color: 'F8D7DA' });
-      rules.push({ column: col.name, type: 'highlight', condition: '>0', color: 'D1E7DD' });
+    const n = col.name;
+    // Data bars on currency totals/amounts
+    if (col.type === 'currency' && /revenue|sales|income|profit|total|amount|salary|pay|price|cost|budget|spend|value|rent|mortgage/i.test(n)) {
+      rules.push({ column: n, type: 'data_bar' });
+    }
+    // Color scale on all percentage columns
+    else if (col.type === 'percentage') {
+      rules.push({ column: n, type: 'color_scale' });
+    }
+    // Color scale on scores/ratings/points/grades/GPA
+    else if (col.type === 'number' && /score|rating|rank|point|grade|gpa|mark|attendance|performance|satisfaction|quality/i.test(n)) {
+      rules.push({ column: n, type: 'color_scale' });
+    }
+    // Green/red highlights on variance/diff columns
+    if (/variance|diff|surplus|deficit|shortage|overdue|remaining|balance/i.test(n) && (col.type === 'currency' || col.type === 'number')) {
+      rules.push({ column: n, type: 'highlight', condition: '<0', color: 'F8D7DA' });
+      rules.push({ column: n, type: 'highlight', condition: '>0', color: 'D1E7DD' });
+    }
+    // Data bars on numeric quantity/volume/count columns
+    else if (col.type === 'number' && /qty|quantity|stock|units?|sold|volume|count|headcount|enrolled|capacity|weight|distance|duration|calories/i.test(n)) {
+      rules.push({ column: n, type: 'data_bar' });
     }
   });
   return rules;
